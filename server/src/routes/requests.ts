@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getAdapter } from "../adapters/registry.js";
 import { ArrAdapter } from "../adapters/arr.js";
 import { logActivity } from "../lib/activity.js";
+import { getServiceDecrypted } from "../config/store.js";
 import type { AppContext } from "../lib/context.js";
 
 const SearchQuery = z.object({ term: z.string().min(1).max(256) });
@@ -26,6 +27,16 @@ type Route = keyof typeof ARR_KIND;
 export function requestRoutes(app: FastifyInstance, ctx: AppContext): void {
   const guard = { preHandler: [app.requireAuth, app.requireCsrf] };
 
+  /**
+   * The root folder an admin saved as this *arr's default on the Get page, but
+   * only while the *arr still lists it, so a member is never offered a folder
+   * that was removed. Undefined means the form falls back to the first root.
+   */
+  function savedRoot(kind: string, roots: Array<{ path: string }>): string | undefined {
+    const saved = getServiceDecrypted(kind, ctx.masterKey)?.extra?.rootFolderPath;
+    return typeof saved === "string" && roots.some((r) => r.path === saved) ? saved : undefined;
+  }
+
   for (const [route, kind] of Object.entries(ARR_KIND) as Array<[Route, string]>) {
     // Profiles / root folders (and Lidarr metadata profiles) for the form.
     app.get(`/api/requests/${route}/options`, { preHandler: app.requireAuth }, async (_req, reply) => {
@@ -35,7 +46,7 @@ export function requestRoutes(app: FastifyInstance, ctx: AppContext): void {
         const [profiles, roots, metadataProfiles] = await Promise.all([
           a.qualityProfiles(), a.rootFolders(), a.metadataProfiles(),
         ]);
-        return { profiles, roots, metadataProfiles };
+        return { profiles, roots, metadataProfiles, defaultRootFolderPath: savedRoot(kind, roots) };
       } catch (e) {
         return reply.code(502).send({ error: (e as Error).message });
       }
