@@ -21,7 +21,10 @@ type RequestRoute = "movie" | "tv" | "music";
 
 interface Profile { id: number; name: string }
 interface RootFolder { id: number; path: string; accessible?: boolean; freeSpace?: number }
-interface OptionsResponse { profiles: Profile[]; roots: RootFolder[]; metadataProfiles: Profile[] }
+interface OptionsResponse {
+  profiles: Profile[]; roots: RootFolder[]; metadataProfiles: Profile[];
+  defaultRootFolderPath?: string;
+}
 
 interface ArrCandidate {
   selectionId: string;
@@ -99,7 +102,7 @@ export function Requests() {
     const opts = optionsQ.data;
     if (!opts) return;
     setProfile((p) => (p === "" && opts.profiles[0] ? opts.profiles[0].id : p));
-    setRoot((r) => (r === "" && opts.roots[0] ? opts.roots[0].path : r));
+    setRoot((r) => (r === "" ? opts.defaultRootFolderPath ?? opts.roots[0]?.path ?? "" : r));
     setMetadataProfile((m) => (m === "" && opts.metadataProfiles[0] ? opts.metadataProfiles[0].id : m));
   }, [optionsQ.data]);
 
