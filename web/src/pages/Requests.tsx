@@ -11,19 +11,18 @@ import { useSearchParams } from "react-router-dom";
 import { apiSend } from "../lib/api.js";
 import { useMutation } from "../lib/useMutation.js";
 import { usePolled } from "../lib/usePolled.js";
-import { bytes } from "../lib/format.js";
 import {
   Alert, Async, Badge, Button, Card, EmptyState, PageHeader, SelectField, cx,
 } from "../components/ui.js";
 import { Icon, type IconName } from "../components/Icon.js";
+import { RootDriveSelect, type DriveRef, type DriveRoot } from "../components/DrivePicker.js";
 
 type RequestRoute = "movie" | "tv" | "music";
 
 interface Profile { id: number; name: string }
-interface RootFolder { id: number; path: string; accessible?: boolean; freeSpace?: number }
 interface OptionsResponse {
-  profiles: Profile[]; roots: RootFolder[]; metadataProfiles: Profile[];
-  defaultRootFolderPath?: string;
+  profiles: Profile[]; roots: DriveRoot[]; metadataProfiles: Profile[];
+  drives: DriveRef[]; defaultRootFolderPath?: string;
 }
 
 interface ArrCandidate {
@@ -190,17 +189,13 @@ export function Requests() {
                   >
                     {opts.profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </SelectField>
-                  <SelectField
-                    label="Root folder"
+                  <RootDriveSelect
+                    roots={opts.roots}
+                    drives={opts.drives}
                     value={root}
-                    onChange={(e) => setRoot(e.target.value)}
-                  >
-                    {opts.roots.map((r) => (
-                      <option key={r.id} value={r.path}>
-                        {r.path}{r.freeSpace != null ? ` · ${bytes(r.freeSpace)} free` : ""}
-                      </option>
-                    ))}
-                  </SelectField>
+                    onChange={setRoot}
+                    service={routeDef.service}
+                  />
                   {isMusic && (
                     <SelectField
                       label="Metadata profile"

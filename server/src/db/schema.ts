@@ -105,6 +105,13 @@ export const activity = sqliteTable(
   }),
 );
 
+/** Instance-wide settings that belong to no one service, as one JSON value per key. */
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  valueJson: text("value_json").notNull(),
+  updatedAt: integer("updated_at").notNull().default(sql`(unixepoch() * 1000)`),
+});
+
 /** Applied forward-only schema migrations (see db/migrate.ts). */
 export const schemaMigrations = sqliteTable("schema_migrations", {
   version: integer("version").primaryKey(),

@@ -6,7 +6,7 @@ import { initDb, getRaw } from "../server/src/db/index.js";
 import { runMigrations, appliedVersions } from "../server/src/db/migrate.js";
 
 /** Every migration version that ships today; extend when adding a migration. */
-const ALL_VERSIONS = [1, 2];
+const ALL_VERSIONS = [1, 2, 3];
 
 const dirs: string[] = [];
 function freshDb(): void {

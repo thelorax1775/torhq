@@ -25,6 +25,7 @@ import {
   SelectField, Skeleton, TableWrap, cx,
 } from "../components/ui.js";
 import { Icon, type IconName } from "../components/Icon.js";
+import { RootDriveSelect, type DriveRef, type DriveRoot } from "../components/DrivePicker.js";
 
 type ArrService = "radarr" | "sonarr" | "lidarr";
 
@@ -33,6 +34,8 @@ const SERVICE_META: Record<ArrService, { label: string; kind: string; icon: Icon
   sonarr: { label: "Sonarr", kind: "TV", icon: "queue" },
   lidarr: { label: "Lidarr", kind: "Music", icon: "activity" },
 };
+
+const CONTENT_NAME: Record<ArrService, string> = { radarr: "movies", sonarr: "TV", lidarr: "music" };
 
 interface Candidate {
   service: ArrService;
@@ -50,13 +53,12 @@ interface LookupResponse {
 }
 
 interface Profile { id: number; name: string }
-interface RootFolder { id: number; path: string; freeSpace?: number }
 type DefaultsEntry =
   | { service: ArrService; configured: false; detail: string }
   | {
       service: ArrService; configured: true;
       defaults: { rootFolderPath?: string; qualityProfileId?: number; metadataProfileId?: number };
-      profiles: Profile[]; roots: RootFolder[]; metadataProfiles: Profile[];
+      profiles: Profile[]; roots: DriveRoot[]; metadataProfiles: Profile[]; drives: DriveRef[];
     };
 interface DefaultsResponse { services: DefaultsEntry[] }
 
@@ -117,6 +119,7 @@ export function Acquire() {
   const service = selected?.service ?? null;
   const entry = defaultsQ.data?.services.find((s) => s.service === service);
   const options = entry?.configured ? entry : null;
+  const rootDrive = options?.roots.find((r) => r.path === root)?.drive;
 
   const targetsQ = usePolled<TargetsResponse>(
     prepared && prepared.service !== "radarr"
@@ -334,13 +337,13 @@ export function Acquire() {
           ) : (
             <div className="stack">
               <div className="grid-2">
-                <SelectField label="Root folder" value={root} onChange={(e) => setRoot(e.target.value)}>
-                  {options.roots.map((r) => (
-                    <option key={r.id} value={r.path}>
-                      {r.path}{r.freeSpace != null ? ` · ${bytes(r.freeSpace)} free` : ""}
-                    </option>
-                  ))}
-                </SelectField>
+                <RootDriveSelect
+                  roots={options.roots}
+                  drives={options.drives}
+                  value={root}
+                  onChange={setRoot}
+                  service={SERVICE_META[selected.service].label}
+                />
                 <SelectField label="Quality profile" value={profile} onChange={(e) => setProfile(Number(e.target.value))}>
                   {options.profiles.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </SelectField>
@@ -356,7 +359,12 @@ export function Acquire() {
                 )}
               </div>
               <Checkbox
-                label={`Remember these as the defaults for ${SERVICE_META[selected.service].label}`}
+                label={
+                  rootDrive
+                    ? `Remember these as the defaults for ${SERVICE_META[selected.service].label}, `
+                      + `and make ${rootDrive.label} the default drive for ${CONTENT_NAME[selected.service]}`
+                    : `Remember these as the defaults for ${SERVICE_META[selected.service].label}`
+                }
                 checked={remember}
                 onChange={setRemember}
               />

@@ -49,6 +49,7 @@ const ADMIN_ONLY_GETS = [
   "/api/libraries",
   "/api/config/roots",
   "/api/acquire/defaults",
+  "/api/drives",
   "/api/search/sources",
   "/api/identify/status",
   "/api/pipeline/check",

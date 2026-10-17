@@ -6,8 +6,10 @@ import type { ProwlarrAdapter } from "../adapters/prowlarr.js";
 import { WebSearchAdapter } from "../adapters/websearch.js";
 import type { QbittorrentAdapter } from "../adapters/qbittorrent.js";
 import type { ArrAdapter } from "../adapters/arr.js";
+import { posix } from "node:path";
 import { logActivity } from "../lib/activity.js";
 import type { AppContext } from "../lib/context.js";
+import { driveFor, getDriveSettings } from "../config/drives.js";
 
 /**
  * Search is one route family with a `source` discriminator:
@@ -78,6 +80,12 @@ const GrabBody = z.object({
   target: z.enum(GRAB_TARGETS).optional(),
   /** Legacy alias for `target`, expressed as the qBittorrent category. */
   category: z.enum(GRAB_CATEGORIES).optional(),
+  /**
+   * The drive a raw qBittorrent grab saves to. Omitted, the downloads default
+   * from Settings applies. Ignored for an *arr target, whose own root folder
+   * decides where the file ends up.
+   */
+  drive: z.string().min(1).max(32).optional(),
 }).superRefine((b, ctx) => {
   if (b.source === "site" && !b.magnet) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["magnet"], message: "a magnet link is required for site grabs" });
@@ -107,6 +115,23 @@ function categoryFor(target: GrabTarget): string {
 /** Targets an *arr adopts. The rest are raw downloads TorHQ adds to qBittorrent itself. */
 function isArrTarget(target: GrabTarget): target is keyof typeof ARR_CATEGORY {
   return target in ARR_CATEGORY;
+}
+
+/**
+ * Where a raw grab saves: the chosen drive's download folder, else the
+ * downloads default's, under a folder named for the category, so a grab to the
+ * 1TB lands in `<1TB downloads>/torhq-manual`. With no drive chosen and no
+ * usable default it is left to the category's own save path.
+ */
+function rawPlacement(driveId: string | undefined, category: string): { savePath?: string; drive?: string } | { error: string } {
+  const s = getDriveSettings();
+  const drive = driveId ? s.drives.find((d) => d.id === driveId) : driveFor("downloads", s);
+  if (driveId && !drive) return { error: `no drive "${driveId}" is configured` };
+  if (!drive) return {};
+  if (!drive.downloadPath) {
+    return driveId ? { error: `${drive.label} has no download folder set in Settings` } : {};
+  }
+  return { savePath: posix.join(drive.downloadPath, category), drive: drive.label };
 }
 
 /** Probes must not hang the sources page — a slow mirror is an unavailable one. */
@@ -258,15 +283,19 @@ export function searchRoutes(app: FastifyInstance, ctx: AppContext): void {
       }
     };
 
+    const placement = isArrTarget(target) ? {} : rawPlacement(body.drive, category);
+    if ("error" in placement) return reply.code(400).send({ error: placement.error });
+
     const finish = (via: "prowlarr" | "qbittorrent", importTriggered: boolean, detail: string) => {
+      const where = placement.drive ? ` on ${placement.drive}` : "";
       logActivity({
         kind: "queued",
         service: via,
-        message: `Sent "${body.title ?? "release"}" to ${detail}`
+        message: `Sent "${body.title ?? "release"}" to ${detail}${where}`
           + (importTriggered ? ` and triggered ${category} import` : ""),
-        data: { source: body.source, via, category, importTriggered },
+        data: { source: body.source, via, category, importTriggered, savePath: placement.savePath },
       });
-      return { ok: true, via, category, importTriggered };
+      return { ok: true, via, category, importTriggered, drive: placement.drive, savePath: placement.savePath };
     };
 
     if (body.source === "prowlarr") {
@@ -297,7 +326,7 @@ export function searchRoutes(app: FastifyInstance, ctx: AppContext): void {
         return reply.code(400).send({ error: (e as Error).message }); // caller sent an unusable release
       }
       try {
-        await qb.addTorrent({ url, category });
+        await qb.addTorrent({ url, category, savePath: placement.savePath });
         return finish("qbittorrent", false, `qBittorrent (${category})`);
       } catch (e) {
         return reply.code(502).send({ error: (e as Error).message });
@@ -308,7 +337,7 @@ export function searchRoutes(app: FastifyInstance, ctx: AppContext): void {
     const qb = qbittorrent();
     if (!qb) return reply.code(409).send({ error: "qBittorrent is not configured" });
     try {
-      await qb.addTorrent({ url: body.magnet!, category });
+      await qb.addTorrent({ url: body.magnet!, category, savePath: placement.savePath });
       return finish("qbittorrent", await nudgeArr(category), `qBittorrent (${category})`);
     } catch (e) {
       return reply.code(502).send({ error: (e as Error).message });

@@ -4,6 +4,7 @@ import { getAdapter } from "../adapters/registry.js";
 import { ArrAdapter } from "../adapters/arr.js";
 import { logActivity } from "../lib/activity.js";
 import { getServiceDecrypted } from "../config/store.js";
+import { ARR_PURPOSE, defaultRootFor, driveRefs, getDriveSettings, withDrives } from "../config/drives.js";
 import type { AppContext } from "../lib/context.js";
 
 const SearchQuery = z.object({ term: z.string().min(1).max(256) });
@@ -28,16 +29,17 @@ export function requestRoutes(app: FastifyInstance, ctx: AppContext): void {
   const guard = { preHandler: [app.requireAuth, app.requireCsrf] };
 
   /**
-   * The root folder an admin saved as this *arr's default on the Get page, but
-   * only while the *arr still lists it, so a member is never offered a folder
-   * that was removed. Undefined means the form falls back to the first root.
+   * The root folder a member's form starts on: the one on the default drive
+   * from Settings, else the root an admin saved on the Get page, and only ever
+   * a root the *arr still lists. Undefined means the form falls back to the
+   * first root.
    */
-  function savedRoot(kind: string, roots: Array<{ path: string }>): string | undefined {
-    const saved = getServiceDecrypted(kind, ctx.masterKey)?.extra?.rootFolderPath;
-    return typeof saved === "string" && roots.some((r) => r.path === saved) ? saved : undefined;
+  function defaultRoot(kind: keyof typeof ARR_PURPOSE, roots: Array<{ path: string }>): string | undefined {
+    const legacy = getServiceDecrypted(kind, ctx.masterKey)?.extra?.rootFolderPath;
+    return defaultRootFor(ARR_PURPOSE[kind], roots, getDriveSettings(), legacy);
   }
 
-  for (const [route, kind] of Object.entries(ARR_KIND) as Array<[Route, string]>) {
+  for (const [route, kind] of Object.entries(ARR_KIND) as Array<[Route, (typeof ARR_KIND)[Route]]>) {
     // Profiles / root folders (and Lidarr metadata profiles) for the form.
     app.get(`/api/requests/${route}/options`, { preHandler: app.requireAuth }, async (_req, reply) => {
       const a = getAdapter(kind, ctx.masterKey) as ArrAdapter | null;
@@ -46,7 +48,11 @@ export function requestRoutes(app: FastifyInstance, ctx: AppContext): void {
         const [profiles, roots, metadataProfiles] = await Promise.all([
           a.qualityProfiles(), a.rootFolders(), a.metadataProfiles(),
         ]);
-        return { profiles, roots, metadataProfiles, defaultRootFolderPath: savedRoot(kind, roots) };
+        const drives = getDriveSettings();
+        return {
+          profiles, roots: withDrives(roots, drives.drives), metadataProfiles,
+          drives: driveRefs(drives), defaultRootFolderPath: defaultRoot(kind, roots),
+        };
       } catch (e) {
         return reply.code(502).send({ error: (e as Error).message });
       }

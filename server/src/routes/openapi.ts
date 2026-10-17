@@ -403,6 +403,42 @@ export const openApiDoc = {
             enum: ["torhq-manual", "torhq-games", "radarr", "sonarr", "lidarr"],
             description: "Legacy alias for `target`, expressed as the qBittorrent category.",
           },
+          drive: {
+            type: "string",
+            description:
+              "Drive id for a `qbittorrent` or `games` grab: it saves to that drive's download folder, under a " +
+              "folder named for the category. Omitted, the `downloads` default from /api/drives applies. " +
+              "Ignored for an *arr target.",
+          },
+        },
+      },
+      DriveSettings: {
+        type: "object",
+        required: ["drives"],
+        description:
+          "The disks content can be placed on. A path belongs to the drive with the longest matching prefix, " +
+          "compared on whole segments, so list every name each service uses for the same disk.",
+        properties: {
+          drives: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["id", "label", "paths"],
+              properties: {
+                id: { type: "string", pattern: "^[a-z0-9-]+$" },
+                label: { type: "string" },
+                paths: { type: "array", items: { type: "string" }, description: "Absolute path prefixes, in any service's view." },
+                downloadPath: { type: "string", description: "qBittorrent's folder on this drive, in qBittorrent's view." },
+              },
+            },
+          },
+          defaults: {
+            type: "object",
+            description: "Drive ids. `default` covers any purpose without its own entry.",
+            properties: Object.fromEntries(
+              ["default", "movies", "tv", "music", "books", "comics", "downloads"].map((k) => [k, { type: "string" }]),
+            ),
+          },
         },
       },
       DownloadAction: {
@@ -763,6 +799,23 @@ export const openApiDoc = {
             } } },
           } } } } },
           "400": errorResponse("invalid query"),
+        },
+      },
+    },
+    "/api/drives": {
+      get: {
+        summary: "Configured drives with their free space, and the default drive per kind of content",
+        security: [{ cookieAuth: [] }],
+        responses: { "200": jsonOk("DriveSettings", "OK"), "403": errorResponse("admin only") },
+      },
+      put: {
+        summary: "Replace the drive configuration",
+        security: [{ cookieAuth: [], csrfToken: [] }],
+        parameters: [csrfHeader],
+        requestBody: jsonBody("DriveSettings"),
+        responses: {
+          "200": jsonOk("DriveSettings", "Saved"),
+          "400": errorResponse("a path on two drives, an unknown default, or a relative path"),
         },
       },
     },

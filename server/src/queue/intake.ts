@@ -1,5 +1,5 @@
 import { promises as fs, constants as FS } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
 import type { Buffer } from "node:buffer";
 import { getLibrary } from "../config/store.js";
 import { getAdapter } from "../adapters/registry.js";
@@ -17,7 +17,8 @@ import { logActivity } from "../lib/activity.js";
  * - `link`: hardlink into staging, reveal atomically, and leave the source
  *   exactly as it was. The library and the source share the same inodes, so the
  *   import is instant, costs no extra disk space, and a torrent still seeding
- *   from the source keeps seeding. Requires both to be on one filesystem.
+ *   from the source keeps seeding. When the source is on a different drive from
+ *   the library no link is possible, so it is copied instead and still kept.
  */
 export type ImportMode = "move" | "link";
 
@@ -104,6 +105,12 @@ export async function previewIntake(
   const mode = importMode(lib);
   const warnings: string[] = [];
   if (mode === "move") warnings.push("The source will be deleted once the import completes.");
+  if (mode === "link" && !(await sameFilesystem(src, lib.stagingPath))) {
+    warnings.push(
+      "The source is on a different drive from this library, so it will be copied rather than linked. "
+      + "The source is kept, and the copy takes up space on the library's drive.",
+    );
+  }
 
   const entries: IntakePreview["entries"] = [];
   let totalBytes = 0;
@@ -121,6 +128,27 @@ export async function previewIntake(
     totalBytes = stat.size;
   }
   return { libraryKey: lib.key, sourcePath: src, destPath, importMode: mode, entries, totalBytes, warnings };
+}
+
+/**
+ * Whether `path` and `target` are on one filesystem, judged from `target`'s
+ * nearest existing ancestor because staging is often created on first use.
+ * Unknown counts as the same, so a failed check never adds a false warning.
+ */
+async function sameFilesystem(path: string, target: string): Promise<boolean> {
+  try {
+    const a = await fs.stat(path);
+    let t = target;
+    for (;;) {
+      try { return (await fs.stat(t)).dev === a.dev; } catch {
+        const parent = dirname(t);
+        if (parent === t) return true;
+        t = parent;
+      }
+    }
+  } catch {
+    return true;
+  }
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -153,22 +181,12 @@ async function linkTree(src: string, dest: string): Promise<void> {
 
 /**
  * A hardlink import that fails partway leaves the caller with a half-built
- * staging tree and an errno. Translate the ones with a real cause into the
+ * staging tree and an errno. A cross-drive EXDEV never reaches here: the
+ * caller copies instead. Translate the ones with a real cause into the
  * action that fixes them; anything else propagates unchanged.
  */
 function explainLinkFailure(err: unknown, source: string, stagingBase: string): Error {
   const code = (err as NodeJS.ErrnoException)?.code;
-  if (code === "EXDEV") {
-    // The links are built in staging, not at the destination, so this is the
-    // source/staging pair that differs — naming the destination here would send
-    // someone to move the wrong directory.
-    return new Error(
-      `Cannot hardlink ${source} into ${stagingBase}: they are on different filesystems. ` +
-      `A hardlink import requires the source, the staging directory and the library to ` +
-      `live on one filesystem. Either put them on the same one, or switch this library ` +
-      `to move mode — but note that move mode deletes the source.`,
-    );
-  }
   if (code === "EPERM" || code === "EACCES") {
     return new Error(
       `Cannot hardlink ${source} into ${stagingBase}: permission denied. Hardlinking needs ` +
@@ -248,7 +266,13 @@ export async function runIntake(
       try {
         await linkTree(source, staged);
       } catch (err) {
-        throw explainLinkFailure(err, source, stagingBase);
+        if ((err as NodeJS.ErrnoException)?.code !== "EXDEV") throw explainLinkFailure(err, source, stagingBase);
+        logActivity({
+          kind: "info", jobId, service: lib.targetService,
+          message: `${finalName} is on a different drive from ${lib.label}, so it is being copied instead of linked; the source is kept`,
+        });
+        await fs.rm(staged, { recursive: true, force: true });
+        await fs.cp(source, staged, { recursive: true, verbatimSymlinks: true });
       }
     } else {
       // Copy (not move) so the source survives until the atomic commit succeeds,

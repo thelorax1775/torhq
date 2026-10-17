@@ -4,6 +4,9 @@ import { getAdapter } from "../adapters/registry.js";
 import { HttpError } from "../adapters/http.js";
 import type { ArrAdapter, ArrCandidateWithService, ArrFlavor } from "../adapters/arr.js";
 import { getServiceDecrypted, upsertService } from "../config/store.js";
+import {
+  ARR_PURPOSE, defaultRootFor, driveOf, driveRefs, getDriveSettings, saveDriveSettings, withDrives,
+} from "../config/drives.js";
 import { logActivity } from "../lib/activity.js";
 import { getSearch, startSearch, viewOf } from "../lib/releaseSearch.js";
 import type { AppContext } from "../lib/context.js";
@@ -150,6 +153,23 @@ export function acquireRoutes(app: FastifyInstance, ctx: AppContext): void {
   }
 
   /**
+   * Save a placement as this *arr's default. A root folder on a known drive is
+   * remembered as that drive, the default Settings shows for this kind of
+   * content, and any root saved per *arr before drives existed is dropped so
+   * the two cannot disagree. A root on no known drive is kept per *arr.
+   */
+  function rememberPlacement(service: ArrFlavor, next: ArrDefaults): void {
+    const s = getDriveSettings();
+    const drive = next.rootFolderPath ? driveOf(next.rootFolderPath, s.drives) : undefined;
+    if (drive) {
+      saveDriveSettings({ ...s, defaults: { ...s.defaults, [ARR_PURPOSE[service]]: drive.id } });
+      saveDefaults(service, { ...next, rootFolderPath: undefined });
+    } else {
+      saveDefaults(service, next);
+    }
+  }
+
+  /**
    * One search box over all three *arr lookups. A query like "dune" legitimately
    * matches a film and a series, so the answer is a single list where each
    * candidate says which *arr it belongs to — the user picks the thing, and the
@@ -192,9 +212,15 @@ export function acquireRoutes(app: FastifyInstance, ctx: AppContext): void {
         const [profiles, roots, metadataProfiles] = await Promise.all([
           a.qualityProfiles(), a.rootFolders(), a.metadataProfiles(),
         ]);
+        const drives = getDriveSettings();
+        const defaults = defaultsOf(service);
         return {
           service, configured: true as const,
-          defaults: defaultsOf(service), profiles, roots, metadataProfiles,
+          defaults: {
+            ...defaults,
+            rootFolderPath: defaultRootFor(ARR_PURPOSE[service], roots, drives, defaults.rootFolderPath),
+          },
+          profiles, roots: withDrives(roots, drives.drives), metadataProfiles, drives: driveRefs(drives),
         };
       } catch (e) {
         return { service, configured: false as const, detail: arrMessage(e) };
@@ -206,7 +232,7 @@ export function acquireRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.put("/api/acquire/defaults", guard, async (req, reply) => {
     const body = DefaultsBody.parse(req.body);
     try {
-      saveDefaults(body.service, {
+      rememberPlacement(body.service, {
         rootFolderPath: body.rootFolderPath,
         qualityProfileId: body.qualityProfileId,
         metadataProfileId: body.metadataProfileId,
@@ -235,9 +261,12 @@ export function acquireRoutes(app: FastifyInstance, ctx: AppContext): void {
     try {
       // Fall back to the *arr's own first root/profile so a fresh install works
       // with no configuration at all; the response says which was used.
-      const rootFolderPath = body.rootFolderPath
-        ?? saved.rootFolderPath
-        ?? (await a.rootFolders())[0]?.path;
+      let rootFolderPath = body.rootFolderPath;
+      if (!rootFolderPath) {
+        const roots = await a.rootFolders();
+        rootFolderPath = defaultRootFor(ARR_PURPOSE[body.service], roots, getDriveSettings(), saved.rootFolderPath)
+          ?? roots[0]?.path;
+      }
       if (!rootFolderPath) {
         return reply.code(409).send({ error: `${body.service} has no root folder configured` });
       }
@@ -267,7 +296,7 @@ export function acquireRoutes(app: FastifyInstance, ctx: AppContext): void {
       });
 
       if (body.remember) {
-        saveDefaults(body.service, { rootFolderPath, qualityProfileId, metadataProfileId });
+        rememberPlacement(body.service, { rootFolderPath, qualityProfileId, metadataProfileId });
       }
 
       logActivity({

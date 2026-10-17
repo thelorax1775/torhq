@@ -108,6 +108,15 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 3,
+    name: "settings",
+    up: (db) => db.exec(`CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+    )`),
+  },
   // Future schema changes go here as new numbered migrations, e.g.:
   // { version: 3, name: "jobs_add_started_at",
   //   up: (db) => { if (!hasColumn(db, "jobs", "started_at")) db.exec("ALTER TABLE jobs ADD COLUMN started_at INTEGER"); } },

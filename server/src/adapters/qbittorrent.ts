@@ -108,10 +108,14 @@ export class QbittorrentAdapter implements ServiceAdapter {
    * makes to qBittorrent, and it is always an explicit, user-initiated grab. The
    * `category` tags ownership: `torhq-manual` for raw grabs, or an *arr's category
    * (radarr/sonarr/lidarr) so that *arr adopts and imports the download.
+   * `savePath` overrides the category's folder for this torrent alone, which
+   * is how a raw grab lands on a chosen drive; automatic torrent management is
+   * switched off for it, or qBittorrent would move it back to the category's.
    */
-  async addTorrent(input: { url: string; category?: string; paused?: boolean }): Promise<void> {
+  async addTorrent(input: { url: string; category?: string; paused?: boolean; savePath?: string }): Promise<void> {
     const form: Record<string, string> = { urls: input.url };
     if (input.category) form.category = input.category;
+    if (input.savePath) { form.savepath = input.savePath; form.autoTMM = "false"; }
     if (input.paused) form.paused = "true";
     const res = await this.postForm("api/v2/torrents/add", form);
     // qBittorrent replies with the literal body "Ok." on success, "Fails." otherwise.

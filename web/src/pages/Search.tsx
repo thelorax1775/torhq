@@ -91,8 +91,15 @@ interface GrabRequestBody {
   indexerId?: number;
   magnet?: string;
   downloadUrl?: string;
+  drive?: string;
 }
-interface GrabResponse { ok: true; via: "prowlarr" | "qbittorrent"; category: string; importTriggered: boolean }
+interface GrabResponse { ok: true; via: "prowlarr" | "qbittorrent"; category: string; importTriggered: boolean; drive?: string }
+
+interface DownloadDrive { id: string; label: string; downloadPath?: string; usage?: { freeBytes: number } }
+interface DrivesResponse { drives: DownloadDrive[]; defaults: { default?: string; downloads?: string } }
+
+/** Targets TorHQ adds to qBittorrent itself, which is where a drive can be chosen. */
+const RAW_TARGETS: GrabTarget[] = ["qbittorrent", "games"];
 
 const SOURCE_DEFS: Array<{ id: SourceId; label: string; icon: IconName }> = [
   { id: "prowlarr", label: "Prowlarr", icon: "server" },
@@ -140,6 +147,13 @@ export function Search() {
   // exists for anyone who would rather it never reached a paid API at all.
   const [identify, setIdentify] = useState(true);
   const [routing, setRouting] = useState<RouteRequest | null>(null);
+  const [drive, setDrive] = useState("");
+
+  const drivesQ = usePolled<DrivesResponse>("/api/drives", 0);
+  const downloadDrives = (drivesQ.data?.drives ?? []).filter((d) => d.downloadPath);
+  const defaultDownloadDrive = drivesQ.data?.defaults.downloads ?? drivesQ.data?.defaults.default;
+  const chosenDrive = drive
+    || (downloadDrives.some((d) => d.id === defaultDownloadDrive) ? defaultDownloadDrive! : "");
 
   const sourcesQ = usePolled<SourcesResponse>("/api/search/sources", 60000);
   // Static per source for the session; only re-subscribed (not re-fetched) when
@@ -231,7 +245,7 @@ export function Search() {
 
   async function doGrab(key: string, body: GrabRequestBody) {
     setPendingRows((s) => new Set(s).add(key));
-    const r = await grab.run(body);
+    const r = await grab.run(RAW_TARGETS.includes(body.target) && chosenDrive ? { ...body, drive: chosenDrive } : body);
     setPendingRows((s) => { const n = new Set(s); n.delete(key); return n; });
     setRowStatus((s) => ({
       ...s,
@@ -384,6 +398,25 @@ export function Search() {
                       >
                         {TARGETS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                       </select>
+                      {RAW_TARGETS.includes(target) && downloadDrives.length > 0 && (
+                        <>
+                          <label className="small muted" htmlFor="grab-drive">on</label>
+                          <select
+                            id="grab-drive"
+                            className="select input-sm"
+                            style={{ width: "auto" }}
+                            value={chosenDrive}
+                            onChange={(e) => setDrive(e.target.value)}
+                          >
+                            {!chosenDrive && <option value="">qBittorrent&rsquo;s default folder</option>}
+                            {downloadDrives.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.label}{d.usage ? ` · ${bytes(d.usage.freeBytes)} free` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
                       <span className="small muted grow">{TARGETS.find((t) => t.id === target)!.hint}</span>
                       <Checkbox
                         label="Identify releases"
@@ -426,7 +459,8 @@ function grabSuccessText(data: GrabResponse): string {
   const dest = data.category === "torhq-manual" ? "qBittorrent"
     : data.category === "torhq-games" ? "qBittorrent (games)"
     : titleCase(data.category);
-  return data.importTriggered ? `Sent to ${dest} — import triggered` : `Sent to ${dest}`;
+  const where = data.drive ? `${dest} on ${data.drive}` : dest;
+  return data.importTriggered ? `Sent to ${where} — import triggered` : `Sent to ${where}`;
 }
 
 function prowlarrGrabBody(r: ProwlarrRelease, target: GrabTarget): GrabRequestBody {

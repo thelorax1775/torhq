@@ -6,6 +6,7 @@ import {
 } from "../config/store.js";
 import { testConfig } from "../adapters/registry.js";
 import { safeResolve } from "../security/paths.js";
+import { driveOf, getDriveSettings } from "../config/drives.js";
 import type { AppContext } from "../lib/context.js";
 
 const ServiceInput = z.object({
@@ -62,9 +63,15 @@ export function setupRoutes(app: FastifyInstance, ctx: AppContext): void {
   });
 
   // Destination libraries for manual intake. Paths validated against roots.
-  app.get("/api/libraries", { preHandler: [app.requireAuth, app.requireAdmin] }, async () => ({
-    libraries: listLibraries(),
-  }));
+  app.get("/api/libraries", { preHandler: [app.requireAuth, app.requireAdmin] }, async () => {
+    const { drives } = getDriveSettings();
+    return {
+      libraries: listLibraries().map((l) => {
+        const d = driveOf(l.destPath, drives);
+        return d ? { ...l, drive: { id: d.id, label: d.label } } : l;
+      }),
+    };
+  });
 
   app.post("/api/libraries", guard, async (req, reply) => {
     const body = LibraryInput.parse(req.body);

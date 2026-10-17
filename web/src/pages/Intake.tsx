@@ -30,8 +30,20 @@ interface Library {
   stagingPath: string;
   rescan: boolean;
   importMode: "move" | "link";
+  drive?: { id: string; label: string };
 }
 interface LibrariesResponse { libraries: Library[] }
+interface DrivesResponse { defaults: Partial<Record<"default" | "books" | "comics" | "music", string>> }
+
+const KIND_LABEL: Record<string, string> = { books: "Books", manga: "Manga", comics: "Comics", music: "Music" };
+
+/** The Settings default that applies to a library kind. */
+function purposeOf(kind: string): "books" | "comics" | "music" | undefined {
+  if (kind === "books") return "books";
+  if (kind === "comics" || kind === "manga") return "comics";
+  if (kind === "music") return "music";
+  return undefined;
+}
 interface RootsResponse { approvedRoots: string[] }
 
 interface IntakePreview {
@@ -75,6 +87,7 @@ export function Intake() {
   const libsQ = usePolled<LibrariesResponse>("/api/libraries");
   const rootsQ = usePolled<RootsResponse>("/api/config/roots");
   const jobsQ = usePolled<JobsResponse>("/api/jobs", 15000);
+  const drivesQ = usePolled<DrivesResponse>("/api/drives", 0);
 
   const [libraryKey, setLibraryKey] = useState("");
   const [sourcePath, setSourcePath] = useState("");
@@ -89,8 +102,20 @@ export function Intake() {
 
   const libraries = libsQ.data?.libraries ?? [];
   const roots = rootsQ.data?.approvedRoots ?? [];
-  const key = libraryKey || libraries[0]?.key || "";
+  const kinds = [...new Set(libraries.map((l) => l.kind))];
+
+  /** The library a kind starts on: the one on that kind's default drive, else its first. */
+  function defaultLibraryFor(kind: string): string {
+    const ofKind = libraries.filter((l) => l.kind === kind);
+    const defaults = drivesQ.data?.defaults ?? {};
+    const purpose = purposeOf(kind);
+    const driveId = (purpose && defaults[purpose]) ?? defaults.default;
+    return (ofKind.find((l) => l.drive?.id === driveId) ?? ofKind[0])?.key ?? "";
+  }
+
+  const key = libraryKey || (kinds[0] ? defaultLibraryFor(kinds[0]) : "");
   const lib = libraries.find((l) => l.key === key);
+  const sameKind = libraries.filter((l) => l.kind === lib?.kind);
   const outOfBounds = !withinRoots(sourcePath, roots);
 
   function body(): IntakeBody {
@@ -135,8 +160,23 @@ export function Intake() {
       ) : (
         <Card title="Stage an import" icon="inbox">
           <div className="grid-2">
-            <SelectField label="Destination library" value={key} onChange={(e) => { setLibraryKey(e.target.value); setPreviewedFor(null); preview.reset(); }}>
-              {libraries.map((l) => <option key={l.key} value={l.key}>{l.label} ({l.kind} → {l.targetService})</option>)}
+            <SelectField
+              label="What is it?"
+              value={lib?.kind ?? ""}
+              onChange={(e) => { setLibraryKey(defaultLibraryFor(e.target.value)); setPreviewedFor(null); preview.reset(); }}
+            >
+              {kinds.map((k) => <option key={k} value={k}>{KIND_LABEL[k] ?? k}</option>)}
+            </SelectField>
+            <SelectField
+              label="Drive"
+              value={key}
+              onChange={(e) => { setLibraryKey(e.target.value); setPreviewedFor(null); preview.reset(); }}
+            >
+              {sameKind.map((l) => (
+                <option key={l.key} value={l.key}>
+                  {l.drive ? `${l.drive.label} — ${l.label}` : l.label} ({l.targetService})
+                </option>
+              ))}
             </SelectField>
             <TextField
               label="Final name (optional)"

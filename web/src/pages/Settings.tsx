@@ -4,8 +4,8 @@
  *
  * Connections live on Services, storage on Mounts; this page deliberately holds
  * only what neither of those owns: display preferences (local, no server round
- * trip) and read-only facts about the running instance, including the approved
- * roots that bound every path TorHQ will accept.
+ * trip), which drive new content goes to, and read-only facts about the running
+ * instance, including the approved roots that bound every path TorHQ will accept.
  */
 import { useEffect, useState } from "react";
 import { usePolled, setPollRate } from "../lib/usePolled.js";
@@ -14,6 +14,7 @@ import {
   Alert, Async, Badge, Card, Field, LinkButton, PageHeader, Stat,
 } from "../components/ui.js";
 import { UpdateCard } from "../components/UpdateCard.js";
+import { DrivesCard } from "../components/DrivesCard.js";
 
 interface RootsResponse { approvedRoots: string[] }
 interface HealthResponse { status: string; uptime: number }
@@ -98,6 +99,8 @@ export function Settings() {
           </Field>
         </div>
       </Card>
+
+      <DrivesCard />
 
       <Card
         title="Approved roots"
