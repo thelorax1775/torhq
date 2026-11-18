@@ -205,9 +205,9 @@ describe("GET /api/activity", () => {
     expect(r.statusCode).toBe(200);
     const items = r.json().items as any[];
     const by = (t: string) => items.find((i) => i.title === t);
-    expect(by("Dune")).toMatchObject({ kind: "movie", stage: "downloading", progress: 60, requestedBy: "sam", href: "/queue" });
+    expect(by("Dune")).toMatchObject({ kind: "movie", stage: "downloading", progress: 60, requestedBy: "sam", href: "/transfers" });
     expect(by("Hail Mary")).toMatchObject({ stage: "available", artwork: "http://p/h.jpg", requestedBy: "alex" });
-    expect(by("Loose.Game")).toMatchObject({ kind: "game", source: "torrent", href: "/downloads" });
+    expect(by("Loose.Game")).toMatchObject({ kind: "game", source: "torrent", href: "/transfers" });
     for (const i of items) {
       for (const k of ["id", "kind", "title", "artwork", "stage", "progress", "etaSeconds", "requestedBy"]) expect(i, k).toHaveProperty(k);
     }

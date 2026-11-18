@@ -18,7 +18,7 @@ function renderActivity(role: "admin" | "member") {
     <MemoryRouter initialEntries={["/activity"]}>
       <Routes>
         <Route path="/activity" element={<Activity role={role} />} />
-        <Route path="/queue" element={<div>queue page</div>} />
+        <Route path="/transfers" element={<div>transfers page</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -77,12 +77,12 @@ describe("Activity page", () => {
   });
 
   it("an admin's row links to the underlying detail; a member's does not", async () => {
-    mockApi(feed([item({ href: "/queue" })]));
+    mockApi(feed([item({ href: "/transfers" })]));
     const { unmount } = renderActivity("admin");
-    expect(await screen.findByRole("link", { name: /Details/ })).toHaveAttribute("href", "/queue");
+    expect(await screen.findByRole("link", { name: /Details/ })).toHaveAttribute("href", "/transfers");
     unmount();
     resetCache();
-    mockApi(feed([item({ href: "/queue" })]));
+    mockApi(feed([item({ href: "/transfers" })]));
     renderActivity("member");
     await screen.findByText("Dune");
     expect(screen.queryByRole("link", { name: /Details/ })).toBeNull();
@@ -122,11 +122,11 @@ describe("nav", () => {
     for (const n of ["Downloads", "Queue", "Jobs & log"]) expect(screen.queryByRole("link", { name: n })).toBeNull();
     expect(screen.queryByText("Advanced")).toBeNull();
   });
-  it("admins keep the old pages under Advanced", () => {
+  it("admins get Transfers and History under System, and no Advanced group", () => {
     renderNav("admin");
-    expect(screen.getByText("Advanced")).toBeInTheDocument();
-    const adv = NAV.find((g) => g.group === "Advanced")!;
-    expect(adv.items.map((i) => i.to)).toEqual(["/get", "/search", "/downloads", "/queue", "/jobs", "/requests"]);
-    for (const i of adv.items) expect(screen.getByRole("link", { name: i.label })).toHaveAttribute("href", i.to);
+    expect(screen.queryByText("Advanced")).toBeNull();
+    const sys = NAV.find((g) => g.group === "System")!;
+    expect(sys.items.map((i) => i.to)).toEqual(["/transfers", "/history", "/services", "/mounts", "/settings", "/users"]);
+    for (const i of sys.items) expect(screen.getByRole("link", { name: i.label })).toHaveAttribute("href", i.to);
   });
 });

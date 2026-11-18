@@ -254,6 +254,19 @@ pre {
   font-variant-numeric: tabular-nums;
   color: var(--text-dim);
 }
+/* Something is waiting for the admin: a filled pill, not just a number. */
+.nav-link .count-attn, .tab-link .count-attn {
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+  font-weight: 600;
+  text-align: center;
+  line-height: 18px;
+}
+.tab-link { position: relative; }
+.tab-link .count-attn { position: absolute; top: 4px; left: calc(50% + 6px); font-size: 11px; }
 
 .sidebar-foot { margin-top: auto; padding-top: var(--s3); border-top: 1px solid var(--border); }
 
@@ -1059,3 +1072,13 @@ pre {
   .toolbar .searchbar { min-width: 0 !important; flex-basis: 100%; }
   .tabs { overflow-x: auto; }
 }
+
+/* Activity: the row a Transfers link pointed at. */
+.activity-row.focused { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+/* Under the hub results: the way to raw indexer search, with when to use it. */
+.raw-search-hint { margin-top: var(--s5); padding-top: var(--s3); border-top: 1px solid var(--border); }
+
+.release-list .list-row { align-items: flex-start; }
+
+.section-title { font-size: var(--fs-md); font-weight: 600; margin: var(--s5) 0 var(--s2); }

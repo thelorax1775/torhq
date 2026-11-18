@@ -57,7 +57,7 @@ export function Users() {
     <>
       <PageHeader
         title="Users"
-        subtitle="Friend accounts can search and request media (Requests, Downloads, Queue, Jobs) but never reach Services, Settings, Libraries, Mounts or Intake."
+        subtitle="Accounts for you and your friends: a friend can search, ask for things and follow them in Activity, and never sees the admin pages."
       />
 
       <Card title="Accounts" icon="shield">

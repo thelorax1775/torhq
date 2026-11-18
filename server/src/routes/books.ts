@@ -92,9 +92,103 @@ const AUDIOBOOK_FLOW: Flow = {
   libraryHint: "No audiobooks library: add one on the Libraries page (kind audiobooks, target Audiobookshelf).",
 };
 
+const FLOWS: Record<string, Flow> = { book: BOOK_FLOW, audiobook: AUDIOBOOK_FLOW };
+
+/** A release a flow can hand to qBittorrent: a magnet, or Prowlarr's download proxy URL. */
+interface Sendable { title: string; indexerId: number; magnet?: string; downloadUrl?: string }
+
+/**
+ * Put one release into qBittorrent under the flow's category, tagged so the
+ * finished download can be found again, and record the grab. Shared by the
+ * admin's own release pick and by approving a member's request.
+ */
+async function sendToQb(flow: Flow, id: string, p: ProwlarrAdapter, qb: QbittorrentAdapter, r: Sendable): Promise<void> {
+  let url: string;
+  try {
+    if (r.magnet) url = r.magnet;
+    else if (r.downloadUrl) url = p.signDownloadUrl(r.downloadUrl, r.indexerId);
+    else throw new Error("this release has no magnet or download URL");
+  } catch (e) {
+    throw new WantedError((e as Error).message, 400);
+  }
+  await qb.addTorrent({ url, category: flow.category, tags: [tagFor(id)] });
+  markGrabbed(id, { releaseTitle: r.title, releaseFormat: flow.format(r.title), category: flow.category });
+}
+
 export function bookRoutes(app: FastifyInstance, ctx: AppContext): void {
   flowRoutes(app, ctx, BOOK_FLOW);
   flowRoutes(app, ctx, AUDIOBOOK_FLOW);
+  pendingRoutes(app, ctx);
+}
+
+/**
+ * Requests waiting for the admin, for Activity's Requests tab and the nav badges.
+ *
+ * Movie, TV and music requests go straight to Radarr/Sonarr/Lidarr, which search
+ * by themselves, so nothing of theirs waits here. Books and audiobooks have no
+ * *arr: a request sits at `requested` until the admin approves it (TorHQ grabs
+ * the best-ranked release) or declines it. All admin-only.
+ */
+function pendingRoutes(app: FastifyInstance, ctx: AppContext): void {
+  const adminRead = { preHandler: [app.requireAuth, app.requireAdmin] };
+  const admin = { preHandler: [app.requireAuth, app.requireAdmin, app.requireCsrf] };
+  const prowlarr = () => getAdapter("prowlarr", ctx.masterKey) as ProwlarrAdapter | null;
+  const qbittorrent = () => getAdapter("qbittorrent", ctx.masterKey) as QbittorrentAdapter | null;
+  const pending = () => listWanted().filter((w) => w.status === "requested" && w.kind in FLOWS);
+
+  app.get("/api/requests/pending", adminRead, async () => ({
+    items: pending().map((w) => ({
+      id: w.id, kind: w.kind, title: w.title, author: w.author, externalId: w.externalId,
+      requestedBy: w.requestedBy, createdAt: w.createdAt,
+    })),
+  }));
+
+  // What waits on the admin, counted, for the nav badges.
+  app.get("/api/attention", adminRead, async () => ({
+    requests: pending().length,
+    imports: listWanted().filter((w) => w.status === "ready" && w.kind in FLOWS).length,
+  }));
+
+  // Approve: search Prowlarr for the request and grab the best-ranked release.
+  app.post("/api/requests/pending/:id/approve", admin, async (req, reply) => {
+    const { id } = IdParam.parse(req.params);
+    const w = getWanted(id);
+    const flow = w ? FLOWS[w.kind] : undefined;
+    if (!w || !flow) return reply.code(404).send({ error: "not found" });
+    if (w.status !== "requested") return reply.code(409).send({ error: `this request is already ${w.status}` });
+    const p = prowlarr();
+    if (!p) return reply.code(409).send({ error: "Prowlarr is not configured" });
+    const qb = qbittorrent();
+    if (!qb) return reply.code(409).send({ error: "qBittorrent is not configured" });
+    let best: ProwlarrRelease | undefined;
+    try {
+      const raw: ProwlarrRelease[] = await p.search(flow.query(w.title, w.author), { categories: [...flow.categories] });
+      const ranked = flow.rank(raw, { title: w.title }) as unknown as ProwlarrRelease[];
+      const guid = flow.best(ranked)?.guid;
+      best = ranked.find((r) => r.guid === guid);
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message });
+    }
+    if (!best) {
+      return reply.code(409).send({ error: `No ${flow.noun} release matches the title and has seeders. Choose one by hand on the ${flow.noun === "book" ? "Books" : "Audiobooks"} page, or decline.` });
+    }
+    try {
+      await sendToQb(flow, id, p, qb, { title: best.title, indexerId: best.indexerId, magnet: best.magnetUrl, downloadUrl: best.downloadUrl });
+    } catch (e) {
+      return reply.code(e instanceof WantedError ? e.statusCode : 502).send({ error: (e as Error).message });
+    }
+    logActivity({ kind: "info", service: flow.kind === "audiobook" ? "audiobooks" : "books", message: `Request for "${w.title}" (${w.requestedBy}) approved by ${req.session!.username}`, data: { wantedId: id } });
+    return { ok: true, release: best.title, item: publicView(getWanted(id)!, true) };
+  });
+
+  app.post("/api/requests/pending/:id/decline", admin, async (req, reply) => {
+    const { id } = IdParam.parse(req.params);
+    const w = getWanted(id);
+    if (!w || !(w.kind in FLOWS)) return reply.code(404).send({ error: "not found" });
+    if (w.status !== "requested") return reply.code(409).send({ error: `this request is already ${w.status}` });
+    declineWanted(id, req.session!.username);
+    return { ok: true };
+  });
 }
 
 function flowRoutes(app: FastifyInstance, ctx: AppContext, flow: Flow): void {
@@ -182,20 +276,11 @@ function flowRoutes(app: FastifyInstance, ctx: AppContext, flow: Flow): void {
     const qb = qbittorrent();
     if (!qb) return reply.code(409).send({ error: "qBittorrent is not configured" });
 
-    let url: string;
     try {
-      if (body.magnet) url = body.magnet;
-      else if (body.downloadUrl) url = p.signDownloadUrl(body.downloadUrl, body.indexerId);
-      else throw new Error("this release has no magnet or download URL");
+      await sendToQb(flow, id, p, qb, body);
     } catch (e) {
-      return reply.code(400).send({ error: (e as Error).message });
+      return reply.code(e instanceof WantedError ? e.statusCode : 502).send({ error: (e as Error).message });
     }
-    try {
-      await qb.addTorrent({ url, category: flow.category, tags: [tagFor(id)] });
-    } catch (e) {
-      return reply.code(502).send({ error: (e as Error).message });
-    }
-    markGrabbed(id, { releaseTitle: body.title, releaseFormat: flow.format(body.title), category: flow.category });
     return { ok: true, category: flow.category, item: publicView(getWanted(id)!, true) };
   });
 

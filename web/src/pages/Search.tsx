@@ -244,8 +244,8 @@ export function Search() {
   return (
     <>
       <PageHeader
-        title="Search"
-        subtitle="Find a release across every indexer Prowlarr knows, a configured torrent site, or the open web — then send it straight to qBittorrent or the right *arr."
+        title="Search indexers"
+        subtitle={<>Raw releases straight from your indexers, for when the main <Link to="/">Search</Link> can't find it (a specific edition, a game, a file no app tracks); a release sent to Radarr, Sonarr or Lidarr is filed by that app.</>}
       />
 
       {activeSourceInfo && !activeSourceInfo.available && (

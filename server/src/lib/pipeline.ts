@@ -203,7 +203,7 @@ function categoryCheck(
     return {
       ...base, ok: false, severity: "error",
       detail: `No category named ${category}; grabs tagged ${category} will not be adopted.`,
-      fix: `Create it on the Downloads page, or set it in ${name}'s download-client settings.`,
+      fix: `Create the ${category} category in qBittorrent, or change the category in ${name}'s download-client settings to one that exists.`,
     };
   }
   return {
@@ -348,7 +348,7 @@ function stuckImportCheck(arr: ArrSnapshot, name: string, qb: QbSnapshot, now: n
     return {
       ...base, ok: false, severity: "warn",
       detail: `${stuck.length} item${stuck.length === 1 ? " has" : "s have"} been waiting to import for over an hour (oldest: "${stuck[0]!.title}").`,
-      fix: "Open Failed imports below for the reason, fix it, then use Manual import.",
+      fix: "Each one is listed under Needs attention on Transfers with the app's reason; fix that, then press Retry import.",
     };
   }
   return { ...base, ok: true, severity: "info", detail: "No queue item has been waiting to import for over an hour." };

@@ -9,7 +9,8 @@
  *   admin  -> /api/acquire/prepare (adds to the *arr) -> /api/acquire/auto-search
  *             (the *arr's own automatic search grabs by itself)
  *   member -> /api/requests/<route> (adds monitored and lets the *arr search)
- * "Choose release" hands an admin to the Get page's release picker.
+ * "Choose release" (admin, under Options) adds the title to its *arr without a
+ * search and lets the admin pick the exact release (components/ChooseRelease).
  */
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -18,6 +19,7 @@ import { useMutation } from "../lib/useMutation.js";
 import { usePolled } from "../lib/usePolled.js";
 import { Alert, Badge, Button, EmptyState, Modal, SelectField, Skeleton, cx, type Tone } from "../components/ui.js";
 import { Icon, type IconName } from "../components/Icon.js";
+import { ChooseRelease } from "../components/ChooseRelease.js";
 
 export type Kind = "movie" | "tv" | "music" | "game" | "book" | "audiobook";
 export type Status = "available" | "requested" | "downloading" | "missing" | "none" | "unknown";
@@ -83,7 +85,7 @@ function blockedReason(r: HubResult): string | null {
     return "Adding books isn't set up yet: it needs Prowlarr and qBittorrent under Services.";
   }
   if (r.kind === "game") {
-    return "Adding games from here isn't set up yet. An admin can still grab one from Raw search.";
+    return "Adding games from here isn't set up yet. An admin can still grab one with Search indexers, linked at the bottom of Search results.";
   }
   if (!r.actionable) {
     if (r.kind === "tv") return "This show has no TVDB id, so Sonarr can't add it.";
@@ -259,6 +261,13 @@ export function Home({ role }: { role: "admin" | "member" | null }) {
         </ul>
       )}
 
+      {isAdmin && query && search.data && (
+        <div className="raw-search-hint small muted" data-testid="raw-search-hint">
+          <Link to={`/search?q=${encodeURIComponent(query)}`}>Not finding it? Search indexers directly</Link>
+          {" "}lists raw releases from Prowlarr for things these results don't cover, like a specific edition, a game or a file no app tracks.
+        </div>
+      )}
+
       {open && (
         <DetailSheet
           result={withOverride(open)}
@@ -284,6 +293,7 @@ export function DetailSheet({ result, isAdmin, onClose, onAdded }: {
   onAdded: (r: HubResult, status: Status, message: string) => void;
 }) {
   const [showOptions, setShowOptions] = useState(false);
+  const [choosing, setChoosing] = useState(false);
   const [quality, setQuality] = useState<number | "">("");
   const [root, setRoot] = useState("");
   const [metaProfile, setMetaProfile] = useState<number | "">("");
@@ -383,7 +393,7 @@ export function DetailSheet({ result, isAdmin, onClose, onAdded }: {
       labelledBy="sheet-title"
       onClose={onClose}
       className="sheet"
-      footer={
+      footer={choosing ? undefined : (
         <>
           {arrOwned && !blocked && (
             <Button variant="ghost" icon="sliders" aria-expanded={showOptions} onClick={() => setShowOptions((v) => !v)}>
@@ -402,7 +412,7 @@ export function DetailSheet({ result, isAdmin, onClose, onAdded }: {
               : disabledReason ? `${label} unavailable` : label}
           </Button>
         </>
-      }
+      )}
     >
       <div className="sheet-body">
         <Artwork r={result} />
@@ -422,7 +432,22 @@ export function DetailSheet({ result, isAdmin, onClose, onAdded }: {
       )}
       {(add.error || approve.error) && <Alert tone="err" title="Couldn't add it">{add.error ?? approve.error}</Alert>}
 
-      {showOptions && arrOwned && !blocked && (
+      {choosing && isAdmin && arrOwned && !blocked && (
+        <ChooseRelease
+          service={result.owner as "radarr" | "sonarr" | "lidarr"}
+          term={lookupTerm(result)}
+          selectionId={result.id}
+          placement={{
+            rootFolderPath: root || undefined,
+            qualityProfileId: quality === "" ? undefined : quality,
+            metadataProfileId: result.kind === "music" && metaProfile !== "" ? metaProfile : undefined,
+          }}
+          onGrabbed={(message) => onAdded(result, "downloading", message)}
+          onCancel={() => setChoosing(false)}
+        />
+      )}
+
+      {showOptions && !choosing && arrOwned && !blocked && (
         <div className="stack options-panel" aria-label="Options">
           <div className="grid-2">
             <SelectField
@@ -450,13 +475,7 @@ export function DetailSheet({ result, isAdmin, onClose, onAdded }: {
           </div>
           {isAdmin && (
             <div>
-              <Link
-                className="btn"
-                style={{ textDecoration: "none" }}
-                to={`/get?q=${encodeURIComponent(result.title)}&service=${result.owner}&pick=${encodeURIComponent(result.id)}`}
-              >
-                <Icon name="download" size={15} />Choose release
-              </Link>
+              <Button icon="download" onClick={() => setChoosing(true)}>Choose release</Button>
               <div className="small muted mt-2">Skips the automatic search and lets you pick a specific release.</div>
             </div>
           )}

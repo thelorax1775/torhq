@@ -207,7 +207,7 @@ export function Books({ role, kind = "book" }: { role: Role; kind?: "book" | "au
         {approve.error && <Alert tone="err" title="Could not approve">{approve.error}</Alert>}
         {isAdmin && (
           <p className="muted small">
-            Approved imports run through <LinkButton to="/jobs" size="sm">Jobs &amp; activity</LinkButton> like any other intake.
+            Approved imports run through <LinkButton to="/history" size="sm">History</LinkButton> like any other import.
           </p>
         )}
       </Card>
