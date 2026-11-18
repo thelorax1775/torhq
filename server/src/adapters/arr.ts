@@ -370,7 +370,19 @@ export class ArrAdapter implements ServiceAdapter {
    */
   async lookupHits(term: string): Promise<ArrLookupHit[]> {
     const out: ArrLookupHit[] = [];
-    for (const r of await this.lookup(term)) {
+    const found = await this.lookup(term);
+    // /lookup does not report file state for titles already held (Radarr has no
+    // hasFile, Sonarr/Lidarr zero the statistics), so read each held title's
+    // own library record. Read-only; a record that can't be read keeps the
+    // lookup's values rather than failing the search.
+    const library = await Promise.all(found.map(async (r) => {
+      if (!(typeof r?.id === "number" && r.id > 0)) return null;
+      try {
+        return await httpJson<any>(this.cfg.baseUrl, this.api(`${RESOURCE[this.kind]}/${r.id}`), { headers: this.hdr() });
+      } catch { return null; }
+    }));
+    for (const [i, lookupRow] of found.entries()) {
+      const r = library[i] ? { ...lookupRow, ...library[i] } : lookupRow;
       const selectionId = this.selectionIdOf(r);
       if (!selectionId) continue;
       const stats = r.statistics ?? {};

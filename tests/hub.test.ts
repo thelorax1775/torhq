@@ -79,7 +79,8 @@ describe("hubSearch", () => {
     expect(by("New")).toMatchObject({ status: "none", actionable: true });
     expect(by("Band")).toMatchObject({ kind: "music", id: "mbid:abc", status: "available", owner: "lidarr" });
     expect(by("GTA V")).toMatchObject({ kind: "game", status: "unknown", owner: "prowlarr", actionable: true });
-    expect(by("Dune")).toMatchObject({ kind: "book", id: "OL1W", status: "unknown", owner: "intake", subtitle: "Frank Herbert" });
+    expect(by("Dune")).toMatchObject({ kind: "book", id: "OL1W", status: "unknown", owner: "intake", subtitle: "Frank Herbert", actionable: false });
+    expect(by("Dune")).toMatchObject({ actionable: false });
     expect(r.results.filter((x) => x.title === "Dune").map((x) => x.kind)).toEqual(["book", "audiobook"]);
   });
 

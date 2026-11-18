@@ -53,7 +53,7 @@ const RADARR_RELEASES = [
   },
 ];
 
-beforeEach(() => httpJson.mockReset());
+beforeEach(() => { httpJson.mockReset(); });
 
 describe("ArrAdapter.releases — the *arr's own interactive search", () => {
   it("asks Radarr for a movie's releases and normalizes them", async () => {
@@ -283,5 +283,51 @@ describe("ArrAdapter.parse — the *arr's own release-name parser", () => {
   it("returns null for a response with nothing parsed in it", async () => {
     httpJson.mockResolvedValueOnce({});
     await expect(new ArrAdapter("radarr", cfg).parse("!!!")).resolves.toBeNull();
+  });
+});
+
+describe("lookupHits reads file state from the library record, not /lookup", () => {
+
+  it("radarr: lookup row has an id but no hasFile; /movie/{id} says it has a file", async () => {
+    httpJson.mockImplementation(async (_b: string, path: string) => {
+      if (path.endsWith("/movie/lookup")) return [{ title: "Avengers: Endgame", tmdbId: 299534, id: 244, monitored: true }];
+      if (path.endsWith("/movie/244")) return { id: 244, tmdbId: 299534, monitored: true, hasFile: true };
+      throw new Error("unexpected " + path);
+    });
+    const [hit] = await new ArrAdapter("radarr", cfg).lookupHits("Avengers: Endgame");
+    expect(hit).toMatchObject({ libraryId: 244, fileCount: 1, monitored: true });
+  });
+
+  it("sonarr: zeroed lookup statistics are replaced by the series record's", async () => {
+    httpJson.mockImplementation(async (_b: string, path: string) => {
+      if (path.endsWith("/series/lookup")) return [{ title: "Adventure Time", tvdbId: 152831, id: 35, monitored: true, statistics: { episodeFileCount: 0 } }];
+      if (path.endsWith("/series/35")) return { id: 35, tvdbId: 152831, monitored: true, statistics: { episodeFileCount: 292 },
+        seasons: [{ seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 26, totalEpisodeCount: 26 } }] };
+      throw new Error("unexpected " + path);
+    });
+    const [hit] = await new ArrAdapter("sonarr", { ...cfg, baseUrl: "http://sonarr:8989" }).lookupHits("Adventure Time");
+    expect(hit.fileCount).toBe(292);
+    expect(hit.seasons?.[0]).toMatchObject({ seasonNumber: 1, episodeFileCount: 26 });
+  });
+
+  it("lidarr: empty lookup statistics; /artist/{id} has the track files", async () => {
+    httpJson.mockImplementation(async (_b: string, path: string) => {
+      if (path.endsWith("/artist/lookup")) return [{ artistName: "Title Fight", foreignArtistId: "abc", id: 230, monitored: true, statistics: {} }];
+      if (path.endsWith("/artist/230")) return { id: 230, foreignArtistId: "abc", monitored: true, statistics: { trackFileCount: 33 } };
+      throw new Error("unexpected " + path);
+    });
+    const [hit] = await new ArrAdapter("lidarr", { ...cfg, baseUrl: "http://lidarr:8686" }).lookupHits("Title Fight");
+    expect(hit.fileCount).toBe(33);
+  });
+
+  it("a title not in the library is not fetched, and a failing record read keeps the lookup values", async () => {
+    httpJson.mockImplementation(async (_b: string, path: string) => {
+      if (path.endsWith("/movie/lookup")) return [
+        { title: "New", tmdbId: 1 }, { title: "Held", tmdbId: 2, id: 9, monitored: true }];
+      throw new Error("boom");
+    });
+    const hits = await new ArrAdapter("radarr", cfg).lookupHits("x");
+    expect(hits.map((h) => h.libraryId)).toEqual([undefined, 9]);
+    expect(httpJson.mock.calls.filter((c) => /\/movie\/\d+$/.test(c[1]))).toHaveLength(1);
   });
 });

@@ -218,7 +218,10 @@ unknown kind is a 400.
   not in the library = `none`. Movie/tv/music use Radarr/Sonarr/Lidarr. If the
   *arr is not configured, movie/tv fall back to TMDB metadata with
   `status: "unknown"`. Games (RAWG) and books/audiobooks (Open Library) are
-  `unknown` until a backend can say what is held. A TMDB-only show has no TVDB
+  `unknown` until a backend can say what is held; books/audiobooks are also
+  `actionable: false` until a book grab path exists. File state is read from the
+  title's own library record (`/movie/{id}`, `/series/{id}`, `/artist/{id}`),
+  because `/lookup` does not report it. A TMDB-only show has no TVDB
   id, so it is `actionable: false`.
 
 ### `GET /api/hub/item?kind=<kind>&id=<id>`

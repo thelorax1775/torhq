@@ -158,7 +158,9 @@ function fromBook(kind: "book" | "audiobook", w: OpenLibraryWork): HubResult {
   return {
     kind, id: w.id, title: w.title, year: w.year, subtitle: w.author, poster: w.poster, overview: w.overview,
     // No backend knows what the library holds yet; say so instead of guessing.
-    status: "unknown", owner: "intake", actionable: true,
+    status: "unknown", owner: "intake",
+    // No book grab path exists yet, so offering an Add would be a dead button.
+    actionable: false,
   };
 }
 
