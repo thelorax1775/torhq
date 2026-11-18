@@ -1,22 +1,17 @@
 # TorHQ
 
-TorHQ is a self-hosted **control plane** for a Proxmox media homelab. It gives you
-one authenticated web UI in front of the services you already run — Radarr,
-Sonarr, Lidarr, Prowlarr, qBittorrent, slskd, Jellyfin, Navidrome, and Kavita —
-plus a small, deliberately-scoped **manual intake** pipeline for content those
-tools don't manage (loose books, manga, and Soulseek music).
+TorHQ is **one search-and-add hub for all your media** — movies, TV, music,
+games, books, comics and audiobooks. Search once, pick the thing, and TorHQ sends
+it to the app that owns that kind of media (Radarr, Sonarr, Lidarr, or its own
+previewed intake into Calibre-Web, Kavita and Audiobookshelf), then shows its
+progress until it is ready to watch, read or listen to — without opening another
+web UI. Friends get member accounts to search and request the same way.
 
-It also closes the acquisition loop end to end. The **Get** page is the one-stop
-path: find the title, TorHQ adds it to the right \*arr, you pick a release from
-that \*arr's own interactive search, and the \*arr downloads, imports, renames and
-files it. Alongside it, **Raw search** keeps the free-text Prowlarr/site/web
-search for anything the \*arr cannot identify, **Downloads** and **Queue** show the
-transfer and the import, and **Pipeline health** says why an import stalled — all
-from one page set, without tab-hopping between five web UIs.
-
-TorHQ is built to sit quietly next to your existing stack. It **observes and
-requests**, and performs only explicit, user-initiated grabs — it does not take
-over your \*arr apps' pipelines.
+Behind the hub it is also the control plane for the stack it sits in front of:
+service health, downloads (qBittorrent, slskd), queues, and plain-language reasons
+when an import stalls. The product definition lives in
+[`docs/vision.md`](docs/vision.md); where this README describes older pages
+(Get, Raw search, Catalogue), those are being folded into the hub.
 
 > **The core boundary.** TorHQ **never moves, renames, or reorganizes media owned
 > by the \*arr applications.** Radarr/Sonarr/Lidarr own search, grab, import,
