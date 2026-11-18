@@ -110,6 +110,7 @@ export function App() {
         <Route path="/queue" element={<Queue />} />
         <Route path="/requests" element={<Requests />} />
         <Route path="/books" element={<Books role={me.role} />} />
+        <Route path="/audiobooks" element={<Books role={me.role} kind="audiobook" />} />
         <Route path="/intake" element={<RequireAdmin role={me.role}><Intake /></RequireAdmin>} />
         <Route path="/jobs" element={<Jobs />} />
         <Route path="/libraries" element={<RequireAdmin role={me.role}><Libraries /></RequireAdmin>} />

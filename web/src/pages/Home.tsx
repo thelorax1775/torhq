@@ -76,8 +76,8 @@ function blockedReason(r: HubResult): string | null {
   if (r.status === "available") return "Already available";
   if (r.status === "downloading") return "Already downloading";
   if (r.status === "requested") return "Already requested";
-  if (r.kind === "audiobook") {
-    return "Adding audiobooks isn't set up yet: TorHQ has no audiobook grab path so far, so there is nothing to send this to.";
+  if (r.kind === "audiobook" && !r.actionable) {
+    return "Adding audiobooks isn't set up yet: it needs Prowlarr and qBittorrent under Services.";
   }
   if (r.kind === "book" && !r.actionable) {
     return "Adding books isn't set up yet: it needs Prowlarr and qBittorrent under Services.";
@@ -295,15 +295,17 @@ function DetailSheet({ result, isAdmin, onClose, onAdded }: {
 
 
   const navigate = useNavigate();
-  const isBook = result.kind === "book";
+  const isBook = result.kind === "book" || result.kind === "audiobook";
+  const booksBase = result.kind === "audiobook" ? "/api/audiobooks" : "/api/books";
+  const booksPage = result.kind === "audiobook" ? "/audiobooks" : "/books";
   // A downloaded book waits for one click; the hub shows that click for admins.
   const wantedQ = usePolled<{ items: Array<{ id: string; externalId: string | null; status: string }> }>(
-    isAdmin && isBook && (result.status === "downloading" || result.status === "requested") ? "/api/books/wanted" : null,
+    isAdmin && isBook && (result.status === "downloading" || result.status === "requested") ? `${booksBase}/wanted` : null,
   );
   const readyId = wantedQ.data?.items.find((w) => w.externalId === result.id && w.status === "ready")?.id;
   const approve = useMutation(
-    (id: string) => apiSend(`/api/books/wanted/${id}/approve`, "POST"),
-    { invalidates: ["/api/books/wanted", "/api/hub/search"] },
+    (id: string) => apiSend(`${booksBase}/wanted/${id}/approve`, "POST"),
+    { invalidates: [`${booksBase}/wanted`, "/api/hub/search"] },
   );
 
   const blocked = readyId ? null : blockedReason(result);
@@ -313,7 +315,7 @@ function DetailSheet({ result, isAdmin, onClose, onAdded }: {
 
   const add = useMutation(async () => {
     if (isBook) {
-      await apiSend("/api/books/request", "POST", {
+      await apiSend(`${booksBase}/request`, "POST", {
         title: result.title,
         author: result.subtitle?.split(",")[0]?.trim() || undefined,
         externalId: /^OL\d+W$/.test(result.id) ? result.id : undefined,
@@ -348,7 +350,7 @@ function DetailSheet({ result, isAdmin, onClose, onAdded }: {
     const r = await add.run();
     if (r.ok && isBook) {
       onAdded(result, "requested", isAdmin ? `Requested "${result.title}".` : `Requested "${result.title}". An admin will pick a release.`);
-      if (isAdmin) navigate("/books"); // the release picker lives there
+      if (isAdmin) navigate(booksPage); // the release picker lives there
       return;
     }
     if (r.ok) {

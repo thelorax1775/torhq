@@ -5,6 +5,7 @@ import { getLibrary } from "../config/store.js";
 import { getAdapter } from "../adapters/registry.js";
 import { NavidromeAdapter } from "../adapters/navidrome.js";
 import { KavitaAdapter } from "../adapters/kavita.js";
+import { AudiobookshelfAdapter } from "../adapters/audiobookshelf.js";
 import type { Library } from "../db/schema.js";
 import { safeResolve, safeFilename, PathValidationError } from "../security/paths.js";
 import { logActivity } from "../lib/activity.js";
@@ -29,6 +30,12 @@ export interface IntakePayload {
   libraryKey: string;
   sourcePath: string;
   targetName?: string; // optional final folder/file name
+  /**
+   * Optional folders between the library root and the final name, "/"-separated
+   * (audiobooks: `Author` or `Author/Title`). Every segment is sanitised and the
+   * composed destination is re-validated against the approved roots.
+   */
+  destSubdir?: string;
 }
 
 export interface IntakePreview {
@@ -73,7 +80,9 @@ function resolvePaths(
   const stagingBase = safeResolve(lib.stagingPath, approvedRoots, { mustExist: false });
 
   const finalName = safeFilename(payload.targetName ?? basename(payload.sourcePath));
-  const destPath = join(destBase, finalName);
+  const subdirs = (payload.destSubdir ?? "").split("/").filter((s) => s.trim() !== "").map(safeFilename);
+  const destDir = join(destBase, ...subdirs);
+  const destPath = join(destDir, finalName);
   // Re-validate the composed destination stays contained (defends targetName).
   safeResolve(destPath, approvedRoots, { mustExist: false });
 
@@ -88,7 +97,7 @@ function resolvePaths(
     }
   }
 
-  return { lib, destBase, destPath, stagingBase, finalName, source };
+  return { lib, destBase: destDir, destPath, stagingBase, finalName, source };
 }
 
 /**
@@ -302,13 +311,16 @@ async function maybeRescan(lib: Library, jobId: string, masterKey: Buffer): Prom
 
 /**
  * Trigger a library rescan on the target service. Manual-intake targets are
- * Kavita (books/manga/comics) and Navidrome (music) only — movies/TV are
+ * Kavita (books/manga/comics), Audiobookshelf (audiobooks) and Navidrome (music) only — movies/TV are
  * *arr-owned and never intake targets, so Jellyfin is not handled here.
  */
 async function requestRescan(lib: Library, masterKey: Buffer): Promise<void> {
   if (lib.targetService === "navidrome") {
     const a = getAdapter("navidrome", masterKey) as NavidromeAdapter | null;
     if (a) await a.startScan();
+  } else if (lib.targetService === "audiobookshelf") {
+    const a = getAdapter("audiobookshelf", masterKey) as AudiobookshelfAdapter | null;
+    if (a) await a.scanLibrary();
   } else if (lib.targetService === "kavita") {
     const a = getAdapter("kavita", masterKey) as KavitaAdapter | null;
     // scanLibrary() with no arg uses the libraryId from the kavita service's

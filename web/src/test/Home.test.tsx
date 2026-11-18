@@ -28,6 +28,7 @@ function renderHome(role: "admin" | "member", url = "/?q=dune") {
         <Route path="/" element={<Home role={role} />} />
         <Route path="/get" element={<div>get page</div>} />
         <Route path="/books" element={<div>books page</div>} />
+        <Route path="/audiobooks" element={<div>audiobooks page</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -80,13 +81,43 @@ describe("Home search hub", () => {
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
   });
 
-  it("an audiobook explains its backend isn't set up instead of a dead button", async () => {
+  it("an audiobook without Prowlarr/qBittorrent explains its backend isn't set up instead of a dead button", async () => {
     const audio = { ...book, kind: "audiobook", id: "OL2W", actionable: false };
     mockApi(routes({ "/api/hub/search": { results: [audio], sources: [{ kind: "audiobook", available: true }] }, "/api/hub/item": { item: { ...audio, genres: [] } } }));
     renderHome("admin");
     await userEvent.click(await screen.findByRole("button", { name: /Dune \(1965\), Audiobook/ }));
     expect(await screen.findByText(/isn't set up yet/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add unavailable" })).toBeDisabled();
+  });
+
+  it("an actionable audiobook is requested through /api/audiobooks/request and an admin lands on the audiobooks page", async () => {
+    const audio = { ...book, kind: "audiobook", id: "OL2W", actionable: true };
+    const api = mockApi(routes({
+      "/api/hub/search": { results: [audio], sources: [{ kind: "audiobook", available: true }] },
+      "/api/hub/item": { item: { ...audio, genres: [] } },
+      "POST /api/audiobooks/request": { ok: true, existing: false },
+    }));
+    renderHome("admin");
+    await userEvent.click(await screen.findByRole("button", { name: /Dune \(1965\), Audiobook/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Add" }));
+    await waitFor(() => expect(api.called("POST /api/audiobooks/request")).toHaveLength(1));
+    expect(api.called("POST /api/books/request")).toHaveLength(0);
+    expect(api.called("POST /api/audiobooks/request")[0]!.body).toMatchObject({ title: "Dune", externalId: "OL2W" });
+    expect(await screen.findByText("audiobooks page")).toBeInTheDocument();
+  });
+
+  it("a downloaded audiobook offers Approve import to an admin in the hub, via the audiobooks API", async () => {
+    const audio = { ...book, kind: "audiobook", id: "OL2W", actionable: false, status: "downloading" };
+    const api = mockApi(routes({
+      "/api/hub/search": { results: [audio], sources: [{ kind: "audiobook", available: true }] },
+      "/api/hub/item": { item: { ...audio, genres: [] } },
+      "/api/audiobooks/wanted": { items: [{ id: "w7", externalId: "OL2W", status: "ready" }] },
+      "POST /api/audiobooks/wanted/w7/approve": { ok: true },
+    }));
+    renderHome("admin");
+    await userEvent.click(await screen.findByRole("button", { name: /Dune \(1965\), Audiobook/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /approve import/i }));
+    await waitFor(() => expect(api.called("POST /api/audiobooks/wanted/w7/approve")).toHaveLength(1));
   });
 
   it("an actionable book is requested through /api/books/request; a member sees Request", async () => {

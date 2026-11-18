@@ -57,7 +57,7 @@ when an import stalls. The product definition lives in
 | **Downloads** | Full qBittorrent control — pause/resume/recheck, priority, category moves, and both flavours of removal, with the destructive one gated behind a typed confirmation. |
 | **Queue** | The Radarr/Sonarr/Lidarr queues merged into one view, with the \*arr's own error messages surfaced, plus per-item removal and blocklisting. One dead service degrades to a notice; it never blanks the view. |
 | **Pipeline health** | Read-only checks of the grab → download → import path: does the \*arr have a download client, do its categories match, can it actually see the directory qBittorrent writes to. Each failing check names the fix — TorHQ never applies one silently. |
-| **Manual intake** | Preview and then atomically import a completed file/folder into a **Kavita** (books/manga/comics) or **Navidrome** (music) library, then trigger a rescan. Per library, either moves the source in or **hardlinks** it so a seeding torrent is left intact. Durable, idempotent, retried. |
+| **Manual intake** | Preview and then atomically import a completed file/folder into a **Kavita** (books/manga/comics), **Audiobookshelf** (audiobooks) or **Navidrome** (music) library, then trigger a rescan. Per library, either moves the source in or **hardlinks** it so a seeding torrent is left intact. Durable, idempotent, retried. |
 | **slskd webhook** | Completed Soulseek downloads are pushed to `/webhooks/slskd` (shared-token auth) and enqueued as intake jobs into a music library. |
 | **Services** | Encrypted-at-rest credential storage with a connection tester. Secrets are never returned to the browser. |
 
@@ -146,7 +146,7 @@ to be on **one filesystem** — if they are not, the import fails with an
 explanation rather than silently falling back to a copy-and-delete that would
 break the seed.
 
-Manual-intake destinations may only target **Kavita** or **Navidrome**. Jellyfin
+Manual-intake destinations may only target **Kavita**, **Audiobookshelf** or **Navidrome**. Jellyfin
 (movies/TV) is intentionally *not* an intake target — that content is \*arr-owned.
 TorHQ integrates with Jellyfin for health/status only.
 
@@ -209,13 +209,56 @@ answers library searches over OPDS.
 
 ---
 
+## Audiobooks (Audiobookshelf)
+
+Audiobooks run the same flow as ebooks (request, Prowlarr grab, previewed
+import, one-click approve), from the **Audiobooks** page or the search hub, and
+land in **Audiobookshelf** (ABS). Differences from ebooks:
+
+- **Search + status.** Open Library supplies the metadata; ABS's own library
+  search says whether you already hold it (*Available*).
+- **Release search.** Prowlarr category **3030** (Audio/Audiobook), title +
+  author. Ranking: **m4b > m4a > mp3 > flac > ogg, then seeders**; a release
+  without the title, or with no seeders, never outranks a real match.
+- **Grab.** qBittorrent category **`torhq-audiobooks`**.
+- **Layout.** The preview targets the ABS library folder as **Author/Title/**
+  (a folder download becomes `Author/Title`; a lone file goes inside
+  `Author/Title/`). Author and title are sanitised and the destination must stay
+  inside `TORHQ_APPROVED_ROOTS`.
+- **After approval.** The intake job moves the files, then asks ABS to scan the
+  library; the item shows *Available* once ABS has it. Nothing moves, and ABS is
+  not scanned, before the approval click.
+- **Access.** Members can *Request* and see their own requests (no paths);
+  search, grab, approve and decline are admin-only.
+
+**Setup**
+
+1. **Service.** Services → *Audiobookshelf*: base URL (e.g.
+   `http://192.168.10.136:13378`) and an **API token** (ABS → Settings → API
+   Keys; the token is encrypted at rest and shown masked). Optionally set the
+   **library ID** to pin which ABS library is searched and scanned; blank uses
+   the first book library. The health check is an authorised call, so a wrong
+   token shows as unhealthy.
+2. **Approved root.** Add the folder ABS's audiobook library watches, as TorHQ
+   sees it, to `TORHQ_APPROVED_ROOTS` and restart TorHQ. Downloads and staging
+   must be inside an approved root too.
+3. **Library.** Libraries → add one with *kind* `audiobooks` (target is
+   Audiobookshelf), destination = the ABS audiobook folder, staging on the same
+   filesystem, *rescan* on.
+4. **qBittorrent category.** Create `torhq-audiobooks` on the Downloads page with
+   a save path inside an approved root.
+5. Prowlarr and qBittorrent are required. `GET /api/audiobooks/status` (admin)
+   lists whatever is still missing.
+
+---
+
 ## Unified search API (hub)
 
 `GET /api/hub/search?q=&kinds=` searches movies, TV, music, games, books and
 audiobooks at once (movies/TV/music through Radarr/Sonarr/Lidarr lookups, games
 through RAWG, books and audiobooks through Open Library) and reports for each
 result whether you already have it: available, requested, downloading, missing,
-none, or unknown (games until a backend can say; books are answered by Kavita and Calibre-Web, and by TorHQ's own request record). `GET /api/hub/item`
+none, or unknown (games until a backend can say; books are answered by Kavita and Calibre-Web, audiobooks by Audiobookshelf, and both by TorHQ's own request record). `GET /api/hub/item`
 returns the detail and default add options for one result. Both are open to
 members as well as the admin and are read-only; a source that is down or slow
 shows up under `sources` instead of failing the search. See
@@ -776,7 +819,8 @@ explicit warning that the source is about to be deleted. This never touches a
 Radarr/Sonarr/Lidarr library.
 
 **Books** — search, request, pick a release and approve the import preview for
-ebooks; see [Books](#books-ebooks).
+ebooks; see [Books](#books-ebooks). **Audiobooks** is the same page for audiobooks;
+see [Audiobooks](#audiobooks-audiobookshelf).
 
 **Libraries** — the Kavita/Navidrome destinations intake can target, each with
 its **import mode** (*Move* or *Hardlink* — see
