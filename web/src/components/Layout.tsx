@@ -13,24 +13,14 @@ import { speed } from "../lib/format.js";
 
 interface NavItem { to: string; label: string; icon: IconName; end?: boolean; adminOnly?: boolean }
 
-export const NAV: Array<{ group: string; items: NavItem[] }> = [
+export const NAV: Array<{ group: string; primary?: boolean; items: NavItem[] }> = [
   {
-    group: "Overview",
+    group: "Main",
+    primary: true,
     items: [
       { to: "/", label: "Search", icon: "search", end: true },
-      { to: "/dashboard", label: "Dashboard", icon: "dashboard", adminOnly: true },
-    ],
-  },
-  {
-    group: "Acquire",
-    items: [
-      { to: "/catalogue", label: "Catalogue", icon: "grid" },
-      { to: "/get", label: "Get", icon: "plus", adminOnly: true },
-      { to: "/search", label: "Raw search", icon: "search", adminOnly: true },
+      { to: "/discover", label: "Discover", icon: "grid" },
       { to: "/activity", label: "Activity", icon: "activity" },
-      { to: "/requests", label: "Requests", icon: "star" },
-      { to: "/books", label: "Books", icon: "book" },
-      { to: "/audiobooks", label: "Audiobooks", icon: "play" },
     ],
   },
   {
@@ -43,9 +33,12 @@ export const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
     group: "Advanced",
     items: [
+      { to: "/get", label: "Get", icon: "plus", adminOnly: true },
+      { to: "/search", label: "Raw search", icon: "search", adminOnly: true },
       { to: "/downloads", label: "Downloads", icon: "download", adminOnly: true },
       { to: "/queue", label: "Queue", icon: "queue", adminOnly: true },
       { to: "/jobs", label: "Jobs & log", icon: "clock", adminOnly: true },
+      { to: "/requests", label: "Requests", icon: "star", adminOnly: true },
     ],
   },
   {
@@ -59,6 +52,11 @@ export const NAV: Array<{ group: string; items: NavItem[] }> = [
   },
 ];
 
+/** Pages that are no longer in the nav but keep working, so bookmarks survive. */
+const LEGACY_TITLES: Record<string, string> = {
+  "/dashboard": "Dashboard", "/books": "Books", "/audiobooks": "Audiobooks", "/catalogue": "Discover",
+};
+
 /** Route → header title. Falls back to the nav label lookup. */
 export function titleForPath(pathname: string): string {
   for (const g of NAV) {
@@ -68,7 +66,7 @@ export function titleForPath(pathname: string): string {
       }
     }
   }
-  return "TorHQ";
+  return LEGACY_TITLES[pathname] ?? "TorHQ";
 }
 
 interface TransferSummary { transfer?: { dlspeed?: number; upspeed?: number } }
@@ -89,6 +87,8 @@ export function Layout({ onLogout, role }: { onLogout: () => void; role: "admin"
     return () => document.removeEventListener("keydown", onKey);
   }, [navOpen]);
 
+  const primary = visibleNav.find((g) => g.primary)?.items ?? [];
+
   // Global transfer readout. Shares the Downloads page's cache entry, and stays
   // hidden when qBittorrent isn't configured or the route isn't there yet.
   const transfer = usePolled<TransferSummary>("/api/downloads", 15000);
@@ -105,7 +105,7 @@ export function Layout({ onLogout, role }: { onLogout: () => void; role: "admin"
         <nav>
           {visibleNav.map((g) => (
             <div className="nav-group" key={g.group}>
-              <div className="nav-group-label">{g.group}</div>
+              {!g.primary && <div className="nav-group-label">{g.group}</div>}
               {g.items.map((item) => (
                 <NavLink
                   key={item.to}
@@ -159,6 +159,20 @@ export function Layout({ onLogout, role }: { onLogout: () => void; role: "admin"
           </ErrorBoundary>
         </main>
       </div>
+
+      {/* Phone only (CSS): the primary pages one tap away. Admins reach the rest through the menu. */}
+      <nav className="tabbar" aria-label="Primary">
+        {primary.map((item) => (
+          <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `tab-link${isActive ? " active" : ""}`}>
+            <Icon name={item.icon} size={20} />
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+        <button type="button" className="tab-link" aria-expanded={navOpen} aria-controls="app-nav" onClick={() => setNavOpen((v) => !v)}>
+          <Icon name="menu" size={20} />
+          <span>More</span>
+        </button>
+      </nav>
     </div>
   );
 }

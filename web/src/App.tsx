@@ -7,7 +7,7 @@
  * survive both a reload and a sign-in.
  */
 import { useCallback, useEffect, useState, type ReactElement } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, apiSend, errorMessage, setCsrf, setUnauthorizedHandler } from "./lib/api.js";
 import { resetCache } from "./lib/usePolled.js";
 import { Layout } from "./components/Layout.js";
@@ -16,7 +16,7 @@ import { Login } from "./pages/Login.js";
 import { Home } from "./pages/Home.js";
 import { Dashboard } from "./pages/Dashboard.js";
 import { Acquire } from "./pages/Acquire.js";
-import { Catalogue } from "./pages/Catalogue.js";
+import { Discover } from "./pages/Discover.js";
 import { Search } from "./pages/Search.js";
 import { Activity } from "./pages/Activity.js";
 import { Downloads } from "./pages/Downloads.js";
@@ -33,6 +33,12 @@ import { Users } from "./pages/Users.js";
 import { NotFound } from "./pages/NotFound.js";
 
 interface Me { authenticated: boolean; needsSetup: boolean; csrfToken: string | null; role: "admin" | "member" | null }
+
+/** Old bookmarks keep working: same query string, new path. */
+export function Redirect({ to }: { to: string }) {
+  const { search } = useLocation();
+  return <Navigate to={`${to}${search}`} replace />;
+}
 
 export function RequireAdmin({ role, children }: { role: Me["role"]; children: ReactElement }) {
   return role === "admin" ? children : <Navigate to="/requests" replace />;
@@ -104,7 +110,8 @@ export function App() {
       <Route element={<Layout onLogout={logout} role={me.role} />}>
         <Route path="/" element={<Home role={me.role} />} />
         <Route path="/dashboard" element={<RequireAdmin role={me.role}><Dashboard /></RequireAdmin>} />
-        <Route path="/catalogue" element={<Catalogue role={me.role} />} />
+        <Route path="/discover" element={<Discover role={me.role} />} />
+        <Route path="/catalogue" element={<Redirect to="/discover" />} />
         <Route path="/get" element={<RequireAdmin role={me.role}><Acquire /></RequireAdmin>} />
         <Route path="/search" element={<RequireAdmin role={me.role}><Search /></RequireAdmin>} />
         <Route path="/activity" element={<Activity role={me.role} />} />

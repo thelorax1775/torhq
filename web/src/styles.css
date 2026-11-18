@@ -296,6 +296,7 @@ pre {
 
 .nav-toggle { display: none; }
 .scrim { display: none; }
+.tabbar { display: none; }
 
 /* --------------------------------------------------------------------------
    §4 Components
@@ -1027,4 +1028,34 @@ pre {
   .activity-art { width: 48px; height: 72px; }
   .step-label { font-size: 9px; letter-spacing: -0.02em; white-space: nowrap; }
   .step { overflow: visible; }
+}
+
+/* 4.17 Phone: bottom tab bar and touch targets ------------------------------ */
+@media (max-width: 620px) {
+  .nav-toggle { display: none; }
+  .tabbar {
+    display: flex; position: fixed; inset: auto 0 0 0; z-index: 38;
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .tab-link {
+    flex: 1; min-width: 0; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 6px 4px; background: none; border: 0; border-top: 2px solid transparent;
+    color: var(--text-muted); font: inherit; font-size: var(--fs-xs); font-weight: 600; cursor: pointer;
+  }
+  .tab-link:hover { text-decoration: none; color: var(--text); }
+  .tab-link.active { color: var(--accent); border-top-color: var(--accent); }
+  .content { padding-bottom: calc(72px + env(safe-area-inset-bottom)); overflow-x: hidden; }
+  .toast { bottom: calc(68px + env(safe-area-inset-bottom)); }
+  .sidebar { z-index: 45; }
+  .scrim { z-index: 44; }
+  /* At least 44px to tap */
+  .btn, .chip, .tab, .nav-link, .input, .select, .tab-link { min-height: 44px; }
+  .btn-icon { min-width: 44px; }
+  .nav-link { padding-block: 10px; }
+  .catalogue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .catalogue-grid.wide { grid-template-columns: minmax(0, 1fr); }
+  .toolbar { flex-wrap: wrap; }
+  .toolbar .searchbar { min-width: 0 !important; flex-basis: 100%; }
+  .tabs { overflow-x: auto; }
 }

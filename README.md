@@ -11,7 +11,7 @@ Behind the hub it is also the control plane for the stack it sits in front of:
 service health, downloads (qBittorrent, slskd), queues, and plain-language reasons
 when an import stalls. The product definition lives in
 [`docs/vision.md`](docs/vision.md); where this README describes older pages
-(Get, Raw search, Catalogue), those are being folded into the hub.
+(Get, Raw search, Requests), those are now under **Advanced** for admins.
 
 > **The core boundary.** TorHQ **never moves, renames, or reorganizes media owned
 > by the \*arr applications.** Radarr/Sonarr/Lidarr own search, grab, import,
@@ -26,7 +26,7 @@ when an import stalls. The product definition lives in
 - [What TorHQ does](#what-torhq-does)
 - [Architecture](#architecture)
 - [The intake boundary](#the-intake-boundary-torhq-vs-the-arr)
-- [The Catalogue: browse movies, TV and games](#the-catalogue-browse-movies-tv-and-games)
+- [Discover: browse movies, TV and games](#discover-browse-movies-tv-and-games)
 - [The Get page: one-stop acquisition](#the-get-page-one-stop-acquisition)
 - [Identifying raw releases](#identifying-raw-releases)
 - [Search, grab, and the import loop](#search-grab-and-the-import-loop)
@@ -50,7 +50,7 @@ when an import stalls. The product definition lives in
 | **Search** | The home page. One search box over movies, TV, music, games and books, with kind filter chips, artwork and a status badge per result. A detail sheet has one primary button: *Add* (admin) or *Request* (member). |
 | **Dashboard** | Aggregated service health, qBittorrent downloads grouped by category, \*arr activity (history + wanted/missing), slskd downloads, storage usage, and failed-import surfacing. |
 | **Identify** | Raw search results are put through Radarr, Sonarr and Lidarr's **own parsers** — the same ones that perform imports — so a release row says what it is and offers to route it to the \*arr that will file it. **Gemini** (optional) handles only the names those parsers cannot read. |
-| **Catalogue** | Browse what's trending, popular, top rated and upcoming — movies and TV from **TMDB**, games from **RAWG** — with genre and platform filters, and the titles already in Radarr/Sonarr marked. One click hands a movie or show to **Get** (or **Requests**, for a member) with that exact title chosen; a game goes to a Prowlarr search over the game categories. |
+| **Discover** | Browse what's trending, popular, top rated and upcoming — movies and TV from **TMDB**, games from **RAWG** — with genre and platform filters, and the titles already in Radarr/Sonarr marked. Opening a title shows the same detail sheet and single action (*Add* / *Request*) as Search. |
 | **Get** | The one-stop loop. One box over all three \*arr lookups, then add-to-library, then that \*arr's **own interactive search** for releases (with its quality scoring and rejection reasons), then a grab the \*arr owns end to end. Because the library entry always exists first, the import and the final folder are guaranteed. |
 | **Requests** | Search Radarr/Sonarr/Lidarr, **choose the intended result**, and submit an add+search request. TorHQ asks; the \*arr does the work. |
 | **Search** | Three sources behind one page: **Prowlarr** (aggregated across every indexer), a scraped **torrent-index site**, and a general **web widget**. Grab a chosen release into a neutral `torhq-manual` category, or hand it to `radarr`/`sonarr`/`lidarr` so that \*arr adopts and imports it. |
@@ -264,32 +264,30 @@ members as well as the admin and are read-only; a source that is down or slow
 shows up under `sources` instead of failing the search. See
 `docs/revamp-contract.md` section 3b.
 
-## The Catalogue: browse movies, TV and games
+## Discover: browse movies, TV and games
 
-**Get** and **Requests** answer "I know what I want". The **Catalogue** answers
-"what's worth getting?" — a poster grid of what's trending, popular, top rated,
-in cinemas, on the air or coming soon, filterable by genre (and, for games, by
-platform), with a title search on top. Click anything for its details.
+**Search** answers "I know what I want". **Discover** (`/discover`, formerly the
+Catalogue) answers "what's worth getting?" — a poster grid of what's trending,
+popular, top rated, in cinemas, on the air or coming soon, filterable by genre
+(and, for games, by platform), with a title search on top.
 
-| Kind | Source | What "get it" does |
+Clicking a title opens **the same detail sheet as Search**, with the same one
+action: *Add* for an admin, *Request* for a member, disabled with its reason when
+the title is already available, requested or downloading. Discover has no
+hand-offs of its own. The old `/catalogue` address redirects here, keeping any
+filters in the link.
+
+| Kind | Source | Notes |
 | --- | --- | --- |
-| Movies | [TMDB](https://www.themoviedb.org/settings/api) | Opens **Get** with the film already chosen, so Radarr adds, grabs, imports and files it. TMDB ids are what Radarr keys on, so the hand-off is exact, not a title match. |
-| TV | TMDB | Opens **Get** with the show chosen, via the TVDB id TMDB records for it, so Sonarr owns it from there. |
-| Games | [RAWG](https://rawg.io/apidocs) | Opens **Raw search** over Prowlarr's *Console* and *PC* categories with **Send grabs to** set to *qBittorrent (games)*. A grab lands in the `torhq-games` category. |
-
-**Games are not imported.** No \*arr manages games, so nothing renames or files
-a game once it has downloaded — it sits in qBittorrent's `torhq-games` category
-for you to deal with. The detail panel says so before you click.
+| Movies | [TMDB](https://www.themoviedb.org/settings/api) | TMDB ids are what Radarr keys on, so the title added is exact, not a title match. |
+| TV | TMDB | Added through the TVDB id TMDB records for the show, so Sonarr owns it from there. A show with no TVDB id says so. |
+| Games | [RAWG](https://rawg.io/apidocs) | Browse only. No \*arr manages games, so the sheet says adding them from here isn't set up; an admin can still grab one from **Raw search** (Advanced). |
 
 **Setup.** Both keys are free. Add them under **Services** as `tmdb` and `rawg`;
 they are encrypted at rest like every other credential. TMDB issues two
 credentials for one account — the short *API key* or the long *API Read Access
 Token* — and either works. A kind whose key is missing is shown with the reason,
 never hidden.
-
-**Members** can browse the catalogue too. For them the button on a movie or show
-is *Request*, which opens **Requests** with the title chosen; games show no
-button, since a member cannot search indexers.
 
 **What it costs you.** Browsing calls TMDB and RAWG from the server, but poster
 images load in the browser straight from `image.tmdb.org` and `media.rawg.io`,
@@ -633,8 +631,8 @@ tells you.
    - Jellyfin — API token
    - Navidrome — `username:password`
    - Kavita — API key (optionally set a **library ID** to trigger explicit scans)
-   - tmdb — API key or read access token (Catalogue movies and TV; optional)
-   - rawg — API key (Catalogue games; optional)
+   - tmdb — API key or read access token (Discover movies and TV; optional)
+   - rawg — API key (Discover games; optional)
    - torrentsearch — no secret; set the base URL to a torrent-index mirror and,
      if needed, override the site-profile selectors / add a Cloudflare solver URL
      (Byparr — see [the torrent site source](#configuring-a-mirror-and-why-its-fragile))
@@ -656,7 +654,7 @@ tells you.
 
 4. **Create qBittorrent categories.** One per *arr, plus one you own:
    `radarr`, `sonarr`, `lidarr`, `torhq-manual`, `torhq-games` if you will
-   grab games from the Catalogue, and `torhq-books` if you will use the
+   grab games from Discover, and `torhq-books` if you will use the
    [Books](#books-ebooks) flow (its save path must be inside an approved root). The category is how a finished download is
    attributed to the app that should import it.
 
@@ -693,7 +691,10 @@ walkthrough of every endpoint is in [`docs/curl-examples.md`](docs/curl-examples
 
 ## Using TorHQ
 
-The sidebar is grouped by what you are trying to do.
+Everyone gets three pages: **Search**, **Discover** and **Activity**. On a phone
+they are the tab bar along the bottom (with *More* for the full menu); on a
+desktop they head the sidebar. Admins also get **Library**, **Advanced** and
+**System** below them.
 
 ### Search (home)
 
@@ -705,10 +706,32 @@ its own automatic search) or **Request** for a member. It is disabled, with the
 reason on it, when the title is already available, requested or downloading.
 **Options** shows the quality profile and root folder, prefilled from your saved
 defaults; admins also get **Choose release**, which opens the Get page's release
-picker. Books, audiobooks and games show their result with a plain note that
-adding them isn't set up yet. A source that is down or unconfigured shows why
-above the results instead of hiding. After adding, the badge flips to
-*Requested* and a toast links to the Queue.
+picker. A source that is down or unconfigured shows why above the results
+instead of hiding. After adding, the badge flips to *Requested* and a toast
+links to Activity.
+
+### Discover
+
+Browse instead of search: pick *Movies*, *TV shows* or *Games*, then a list
+(*Trending*, *Popular*, *Top rated*, …), a genre, or type a title. A poster opens
+the same detail sheet and the same single action as Search. See
+[Discover](#discover-browse-movies-tv-and-games).
+
+### Activity
+
+Every title you added or requested, tracked from *Requested* to *Available*, with
+progress and, when something is stuck, the reason and the fix in plain words.
+Members see their own; admins see everything.
+
+### Admin pages
+
+Admins reach these from the sidebar (or *More* on a phone). Old bookmarks to
+`/catalogue`, `/dashboard`, `/books` and `/audiobooks` still work.
+
+- **Library** — *Intake* and *Libraries* (below).
+- **Advanced** — *Get*, *Raw search*, *Downloads*, *Queue*, *Jobs & log* and
+  *Requests* (the admin view of what members asked for).
+- **System** — *Services*, *Mounts*, *Settings* and *Users*.
 
 ### Dashboard
 
@@ -719,12 +742,6 @@ independently, so one unreachable service degrades to a notice instead of
 blanking the page.
 
 ### Acquire
-
-**Catalogue** — browse instead of search. Pick *Movies*, *TV shows* or *Games*,
-then a list (*Trending*, *Popular*, *Top rated*, …), a genre, or type a title.
-Click a poster for details, then *Get* / *Request* / *Find releases*. Every
-filter is in the URL, so a view can be bookmarked. See
-[The Catalogue](#the-catalogue-browse-movies-tv-and-games).
 
 **Get** — the one-stop page, and the one to reach for by default.
 
@@ -767,7 +784,7 @@ Set **Send grabs to** before you grab — it decides what happens next:
 | --- | --- |
 | Radarr / Sonarr / Lidarr | The release goes to that \*arr's category and the \*arr is asked to poll immediately, so it adopts and imports without waiting. |
 | qBittorrent (manual) | Lands in `torhq-manual`. Nothing imports it; it is yours to organize. |
-| qBittorrent (games) | Lands in `torhq-games`. Same as manual, kept separate; the Catalogue sets this for games. |
+| qBittorrent (games) | Lands in `torhq-games`. Same as manual, kept separate; Discover sets this for games. |
 
 The whole query — source, term, filters — lives in the URL, so a search is
 reloadable and shareable. `seeders: —` means the indexer reported no count; it
