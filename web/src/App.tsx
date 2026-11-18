@@ -31,7 +31,7 @@ import { NotFound } from "./pages/NotFound.js";
 
 interface Me { authenticated: boolean; needsSetup: boolean; csrfToken: string | null; role: "admin" | "member" | null }
 
-function RequireAdmin({ role, children }: { role: Me["role"]; children: ReactElement }) {
+export function RequireAdmin({ role, children }: { role: Me["role"]; children: ReactElement }) {
   return role === "admin" ? children : <Navigate to="/requests" replace />;
 }
 
