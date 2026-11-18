@@ -208,7 +208,8 @@ curl -s -b $JAR -X POST $BASE/api/intake \
 curl -s -b $JAR $BASE/api/jobs | jq
 curl -s -b $JAR $BASE/api/jobs/<jobId> | jq
 curl -s -b $JAR -X POST $BASE/api/jobs/<jobId>/retry -H "x-csrf-token: $CSRF"
-curl -s -b $JAR $BASE/api/activity?limit=50 | jq
+curl -s -b $JAR $BASE/api/activity | jq            # the Activity list
+curl -s -b $JAR $BASE/api/activity/log?limit=50 | jq   # raw audit log (admin)
 ```
 
 ## 7. Dashboard data

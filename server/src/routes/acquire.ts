@@ -276,7 +276,7 @@ export function acquireRoutes(app: FastifyInstance, ctx: AppContext): void {
         kind: "requested",
         service: body.service,
         message: `Prepared "${created.title}" in ${body.service} (${rootFolderPath})`,
-        data: { id: created.id, rootFolderPath, qualityProfileId },
+        data: { id: created.id, title: created.title, by: req.session!.username, searched: false, rootFolderPath, qualityProfileId },
       });
       return {
         ok: true, id: created.id, title: created.title,

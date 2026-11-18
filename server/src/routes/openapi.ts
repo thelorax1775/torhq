@@ -947,13 +947,28 @@ export const openApiDoc = {
     },
     "/api/activity": {
       get: {
-        summary: "Global activity timeline",
+        summary: "One Activity list: every requested item and where it is from requested to available",
+        description:
+          "Each item carries kind, title, artwork, stage (requested, searching, downloading, importing, available), " +
+          "status (active, stalled, done), progress 0-100, etaSeconds, requestedBy and, for a stall, `stall.reason` and `stall.fix`. " +
+          "Newest first. An admin sees everything (including raw downloads and intake jobs, with `href` to the detail page); " +
+          "a member sees their own requests plus other people's in-flight items as generic progress, with no requester, paths or hrefs.",
         parameters: [{
           name: "limit", in: "query", required: false,
           schema: { type: "integer", minimum: 1, maximum: 500, default: 100 },
           description: "Rejected outside 1-500 rather than clamped, so a caller is never quietly given something other than what it asked for.",
         }],
-        responses: { "200": { description: "OK" }, "400": errorResponse("limit out of range or not a number") },
+        responses: { "200": { description: "{ items, unavailable }" }, "400": errorResponse("limit out of range or not a number") },
+      },
+    },
+    "/api/activity/log": {
+      get: {
+        summary: "The raw append-only audit log (admin only)",
+        parameters: [{
+          name: "limit", in: "query", required: false,
+          schema: { type: "integer", minimum: 1, maximum: 500, default: 100 },
+        }],
+        responses: { "200": { description: "OK" }, "400": errorResponse("limit out of range or not a number"), "403": errorResponse("admin only") },
       },
     },
     "/api/downloads": {

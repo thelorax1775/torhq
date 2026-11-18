@@ -52,6 +52,7 @@ const ADMIN_ONLY_GETS = [
   "/api/search/sources",
   "/api/identify/status",
   "/api/pipeline/check",
+  "/api/activity/log",
   "/api/status/health",
 ];
 

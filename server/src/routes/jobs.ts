@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { previewIntake, type IntakePayload } from "../queue/intake.js";
 import { enqueue, listJobs, getJob, retryJob } from "../queue/queue.js";
-import { jobActivity, recentActivity } from "../lib/activity.js";
+import { jobActivity } from "../lib/activity.js";
 import { PathValidationError } from "../security/paths.js";
 import type { AppContext } from "../lib/context.js";
 
@@ -11,13 +11,6 @@ const JOB_STATUSES = ["queued", "running", "completed", "failed", "dead"] as con
 
 const JobListQuery = z.object({
   status: z.enum(JOB_STATUSES).optional(),
-});
-
-const ActivityQuery = z.object({
-  // Coerced and clamped rather than trusted: SQLite reads a negative LIMIT as
-  // "no limit", so `?limit=-1` would return the entire activity table, and a
-  // non-numeric value would reach the driver as NaN and throw.
-  limit: z.coerce.number().int().min(1).max(500).default(100),
 });
 
 const IdParam = z.object({ id: z.string().min(1).max(64) });
@@ -79,11 +72,5 @@ export function jobRoutes(app: FastifyInstance, ctx: AppContext): void {
     const job = retryJob(id);
     if (!job) return reply.code(404).send({ error: "not found" });
     return { ok: true, job };
-  });
-
-  // Global activity timeline.
-  app.get("/api/activity", { preHandler: app.requireAuth }, async (req) => {
-    const { limit } = ActivityQuery.parse(req.query ?? {});
-    return { activity: recentActivity(limit) };
   });
 }

@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { activity, type ActivityRow } from "../db/schema.js";
 
@@ -29,4 +29,11 @@ export function recentActivity(limit = 100): ActivityRow[] {
 export function jobActivity(jobId: string): ActivityRow[] {
   return getDb().select().from(activity).where(eq(activity.jobId, jobId))
     .orderBy(desc(activity.createdAt)).all();
+}
+
+/** Recent entries of one kind, newest first. Feeds the Activity view's request list. */
+export function activityOfKind(kind: ActivityKind, sinceMs: number, limit = 200): ActivityRow[] {
+  return getDb().select().from(activity)
+    .where(and(eq(activity.kind, kind), gte(activity.createdAt, sinceMs)))
+    .orderBy(desc(activity.createdAt)).limit(limit).all();
 }

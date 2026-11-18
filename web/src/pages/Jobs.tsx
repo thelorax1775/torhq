@@ -2,7 +2,7 @@
  * Jobs & activity — TorHQ's own manual-intake worker, not the *arr.
  *
  * Consumes `GET /api/jobs` (the durable job queue), `POST /api/jobs/:id/retry`,
- * and `GET /api/activity` (the append-only audit log). A job's own history is
+ * and `GET /api/activity/log` (the append-only audit log). A job's own history is
  * fetched on demand via `GET /api/jobs/:id` when its row is expanded, so the
  * list view stays a single cheap request.
  */
@@ -59,7 +59,7 @@ const KIND_TONE: Record<string, Tone> = {
 
 export function Jobs() {
   const q = usePolled<JobsResponse>("/api/jobs", 8000);
-  const activity = usePolled<ActivityResponse>("/api/activity?limit=100", 15000);
+  const activity = usePolled<ActivityResponse>("/api/activity/log?limit=100", 15000);
 
   const [status, setStatus] = useState("all");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -67,7 +67,7 @@ export function Jobs() {
 
   const retry = useMutation(
     (id: string) => apiSend<{ ok: true; job: Job }>(`/api/jobs/${id}/retry`, "POST"),
-    { invalidates: ["/api/jobs", "/api/activity"] },
+    { invalidates: ["/api/jobs", "/api/activity/log"] },
   );
 
   const jobs = q.data?.jobs ?? [];

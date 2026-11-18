@@ -22,6 +22,7 @@ import { identifyRoutes } from "./routes/identify.js";
 import { downloadRoutes } from "./routes/downloads.js";
 import { pipelineRoutes } from "./routes/pipeline.js";
 import { jobRoutes } from "./routes/jobs.js";
+import { activityFeedRoutes } from "./routes/activityFeed.js";
 import { statusRoutes } from "./routes/status.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { systemRoutes } from "./routes/system.js";
@@ -85,6 +86,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   downloadRoutes(app, ctx);
   pipelineRoutes(app, ctx);
   jobRoutes(app, ctx);
+  activityFeedRoutes(app, ctx);
   statusRoutes(app, ctx);
   systemRoutes(app, ctx);
   updateRoutes(app, ctx);

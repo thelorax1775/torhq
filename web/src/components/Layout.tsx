@@ -27,8 +27,7 @@ export const NAV: Array<{ group: string; items: NavItem[] }> = [
       { to: "/catalogue", label: "Catalogue", icon: "grid" },
       { to: "/get", label: "Get", icon: "plus", adminOnly: true },
       { to: "/search", label: "Raw search", icon: "search", adminOnly: true },
-      { to: "/downloads", label: "Downloads", icon: "download" },
-      { to: "/queue", label: "Queue", icon: "queue" },
+      { to: "/activity", label: "Activity", icon: "activity" },
       { to: "/requests", label: "Requests", icon: "star" },
       { to: "/books", label: "Books", icon: "book" },
       { to: "/audiobooks", label: "Audiobooks", icon: "play" },
@@ -39,7 +38,14 @@ export const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { to: "/intake", label: "Intake", icon: "inbox", adminOnly: true },
       { to: "/libraries", label: "Libraries", icon: "book", adminOnly: true },
-      { to: "/jobs", label: "Jobs & activity", icon: "clock" },
+    ],
+  },
+  {
+    group: "Advanced",
+    items: [
+      { to: "/downloads", label: "Downloads", icon: "download", adminOnly: true },
+      { to: "/queue", label: "Queue", icon: "queue", adminOnly: true },
+      { to: "/jobs", label: "Jobs & log", icon: "clock", adminOnly: true },
     ],
   },
   {
