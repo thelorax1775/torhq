@@ -91,6 +91,14 @@ describe("admin-only mutations", () => {
     expect(r.statusCode).toBe(403);
   });
 
+  it("automatic *arr search is blocked for a member", async () => {
+    const r = await app.inject({
+      method: "POST", url: "/api/acquire/auto-search",
+      headers: { cookie: memberCookie }, payload: { service: "radarr", id: 1 },
+    });
+    expect(r.statusCode).toBe(403);
+  });
+
   it("queue mutations are blocked for a member", async () => {
     const r = await app.inject({
       method: "POST", url: "/api/queue/refresh",

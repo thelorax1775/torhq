@@ -13,6 +13,7 @@ import { resetCache } from "./lib/usePolled.js";
 import { Layout } from "./components/Layout.js";
 import { Button, Card } from "./components/ui.js";
 import { Login } from "./pages/Login.js";
+import { Home } from "./pages/Home.js";
 import { Dashboard } from "./pages/Dashboard.js";
 import { Acquire } from "./pages/Acquire.js";
 import { Catalogue } from "./pages/Catalogue.js";
@@ -99,7 +100,8 @@ export function App() {
   return (
     <Routes>
       <Route element={<Layout onLogout={logout} role={me.role} />}>
-        <Route path="/" element={<RequireAdmin role={me.role}><Dashboard /></RequireAdmin>} />
+        <Route path="/" element={<Home role={me.role} />} />
+        <Route path="/dashboard" element={<RequireAdmin role={me.role}><Dashboard /></RequireAdmin>} />
         <Route path="/catalogue" element={<Catalogue role={me.role} />} />
         <Route path="/get" element={<RequireAdmin role={me.role}><Acquire /></RequireAdmin>} />
         <Route path="/search" element={<RequireAdmin role={me.role}><Search /></RequireAdmin>} />
@@ -113,8 +115,6 @@ export function App() {
         <Route path="/services" element={<RequireAdmin role={me.role}><Services /></RequireAdmin>} />
         <Route path="/settings" element={<RequireAdmin role={me.role}><Settings /></RequireAdmin>} />
         <Route path="/users" element={<RequireAdmin role={me.role}><Users /></RequireAdmin>} />
-        {/* Legacy hash-free aliases from the prototype's page names. */}
-        <Route path="/dashboard" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

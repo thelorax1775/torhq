@@ -237,6 +237,19 @@ profile/root folder) or `none`. **`rootFolderPath` is returned to admins only.**
 Errors: 400 bad id for the kind, 404 not found, 409 owner app not configured,
 502 source failed/timed out.
 
+### One-click add (used by the home page)
+
+- `POST /api/acquire/auto-search` — **admin only** (`requireAdmin`, CSRF).
+  `{ service: "radarr"|"sonarr"|"lidarr", id }` (the library id `prepare`
+  returned) → `{ ok, service, command }`. Posts the *arr's own
+  `MoviesSearch` / `SeriesSearch` / `ArtistSearch` command: the *arr searches
+  and grabs by itself. TorHQ never lists or picks a release here. 409 when the
+  service is not configured, 502 when the *arr refuses.
+- `POST /api/requests/:route` (member allowed) — `rootFolderPath` and
+  `qualityProfileId` are now **optional**. Omitted, the saved defaults apply,
+  then the *arr's first root folder/quality profile (and first metadata profile
+  for Lidarr), so a member never has to know a server path.
+
 ---
 
 ## 4. SPA — `web/`
@@ -245,7 +258,7 @@ React 18 + Vite + `react-router-dom` v6 (already in `web/package.json` and the
 lockfile — **do not add other dependencies**). Single origin, session cookie,
 CSRF header via the existing `web/src/lib/api.ts` helper.
 
-Routes: `/` dashboard, `/search`, `/downloads`, `/queue`, `/requests`,
+Routes: `/` search hub (admin and member), `/dashboard` (admin), `/search` (raw search), `/downloads`, `/queue`, `/requests`,
 `/intake`, `/jobs`, `/libraries`, `/mounts`, `/services`, `/settings`.
 Deep links must work on reload — the server already falls back to `index.html`
 for non-`/api` paths.

@@ -503,6 +503,22 @@ export class ArrAdapter implements ServiceAdapter {
   }
 
   /**
+   * Ask the *arr to run its OWN automatic search for one library item: it
+   * searches its indexers, picks the best release its profile accepts and grabs
+   * it into its own queue. TorHQ only issues the command (movie / series /
+   * artist level); it never sees or chooses a release.
+   */
+  async automaticSearch(id: number): Promise<{ command: string }> {
+    const spec = {
+      radarr: { name: "MoviesSearch", body: { movieIds: [id] } },
+      sonarr: { name: "SeriesSearch", body: { seriesId: id } },
+      lidarr: { name: "ArtistSearch", body: { artistId: id } },
+    }[this.kind];
+    await this.command(spec.name, spec.body);
+    return { command: spec.name };
+  }
+
+  /**
    * Nudge the *arr to poll its download client and import completed downloads
    * now, rather than waiting for its next interval. Used after TorHQ pushes a
    * magnet into the *arr's qBittorrent category: the *arr still owns the import,

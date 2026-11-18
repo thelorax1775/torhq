@@ -16,7 +16,10 @@ interface NavItem { to: string; label: string; icon: IconName; end?: boolean; ad
 export const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
     group: "Overview",
-    items: [{ to: "/", label: "Dashboard", icon: "dashboard", end: true, adminOnly: true }],
+    items: [
+      { to: "/", label: "Search", icon: "search", end: true },
+      { to: "/dashboard", label: "Dashboard", icon: "dashboard", adminOnly: true },
+    ],
   },
   {
     group: "Acquire",

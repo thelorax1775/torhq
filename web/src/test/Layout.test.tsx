@@ -21,6 +21,12 @@ const adminOnly = NAV.flatMap((g) => g.items).filter((i) => i.adminOnly).map((i)
 const shared = NAV.flatMap((g) => g.items).filter((i) => !i.adminOnly).map((i) => i.label);
 
 describe("Layout navigation", () => {
+  it("lists Search first, for everyone", () => {
+    expect(NAV[0]!.items[0]).toMatchObject({ to: "/", label: "Search" });
+    expect(NAV[0]!.items[0]!.adminOnly).toBeFalsy();
+    expect(NAV.flatMap((g) => g.items).find((i) => i.label === "Dashboard")).toMatchObject({ to: "/dashboard", adminOnly: true });
+  });
+
   it("hides every admin-only link from a member", () => {
     renderLayout("member");
     expect(adminOnly.length).toBeGreaterThan(0);
