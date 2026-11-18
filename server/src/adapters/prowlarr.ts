@@ -13,8 +13,10 @@ import type { AdapterConfig, HealthResult, ServiceAdapter } from "./types.js";
  *    query string**, so it is never handed to the browser as-is: normalization
  *    strips `apikey`, and `signDownloadUrl` re-attaches it server-side (after
  *    checking the URL still points at this Prowlarr) when a grab needs it.
- *  - `magnetUrl` is only present for some indexers; grabbing by `guid` +
- *    `indexerId` is the path that always works.
+ *  - `magnetUrl` is only a real magnet for some indexers. Public ones put the
+ *    magnet in `guid` instead and a Prowlarr proxy link in `magnetUrl`;
+ *    normalization falls back to the guid magnet, else treats that proxy link
+ *    like `downloadUrl`. Grabbing by `guid` + `indexerId` also always works.
  */
 export interface ProwlarrCategory {
   id: number;
@@ -178,8 +180,10 @@ export function normalizeReleases(raw: unknown): ProwlarrRelease[] {
     const indexerId = Number(r?.indexerId);
     if (!guid || !title || !Number.isInteger(indexerId)) continue;
     const infoUrl = httpUrl(r?.infoUrl);
-    const magnet = magnetUrl(r?.magnetUrl);
-    const downloadUrl = stripApiKey(r?.downloadUrl);
+    // Public indexers (TPB, Knaben...) put the real magnet in `guid` and a
+    // Prowlarr proxy link (with the API key) in `magnetUrl`.
+    const magnet = magnetUrl(r?.magnetUrl) ?? magnetUrl(guid);
+    const downloadUrl = stripApiKey(r?.downloadUrl) ?? (magnet ? undefined : stripApiKey(r?.magnetUrl));
     out.push({
       guid,
       indexerId,
