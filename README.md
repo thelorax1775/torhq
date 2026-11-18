@@ -156,6 +156,18 @@ previewed, approved import.
 
 ---
 
+## Unified search API (hub)
+
+`GET /api/hub/search?q=&kinds=` searches movies, TV, music, games, books and
+audiobooks at once (movies/TV/music through Radarr/Sonarr/Lidarr lookups, games
+through RAWG, books and audiobooks through Open Library) and reports for each
+result whether you already have it: available, requested, downloading, missing,
+none, or unknown (games and books until a backend can say). `GET /api/hub/item`
+returns the detail and default add options for one result. Both are open to
+members as well as the admin and are read-only; a source that is down or slow
+shows up under `sources` instead of failing the search. See
+`docs/revamp-contract.md` section 3b.
+
 ## The Catalogue: browse movies, TV and games
 
 **Get** and **Requests** answer "I know what I want". The **Catalogue** answers

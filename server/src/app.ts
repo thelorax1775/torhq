@@ -16,6 +16,7 @@ import { requestRoutes } from "./routes/requests.js";
 import { searchRoutes } from "./routes/search.js";
 import { acquireRoutes } from "./routes/acquire.js";
 import { catalogueRoutes } from "./routes/catalogue.js";
+import { hubRoutes } from "./routes/hub.js";
 import { identifyRoutes } from "./routes/identify.js";
 import { downloadRoutes } from "./routes/downloads.js";
 import { pipelineRoutes } from "./routes/pipeline.js";
@@ -77,6 +78,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   searchRoutes(app, ctx);
   acquireRoutes(app, ctx);
   catalogueRoutes(app, ctx);
+  hubRoutes(app, ctx);
   identifyRoutes(app, ctx);
   downloadRoutes(app, ctx);
   pipelineRoutes(app, ctx);
