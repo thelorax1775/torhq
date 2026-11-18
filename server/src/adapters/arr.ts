@@ -70,6 +70,19 @@ export interface ArrQueueItem {
   added?: string;
   /** The library entry this download belongs to: movieId / seriesId / artistId. Absent when unmatched. */
   libraryId?: number;
+  /** The movie / series / artist name, as opposed to `title`, which is the release name. */
+  mediaTitle?: string;
+  /** Artwork for the library entry, when the *arr included it with the queue record. */
+  poster?: string;
+}
+
+/** The *arr's own record of one library entry, enough to say whether it has arrived. */
+export interface ArrLibraryEntry {
+  title: string;
+  poster?: string;
+  /** Imported files: 0/1 for a movie, episode files for a series, track files for an artist. */
+  fileCount: number;
+  monitored: boolean;
 }
 
 /**
@@ -266,6 +279,24 @@ export class ArrAdapter implements ServiceAdapter {
       outputPath: r.outputPath || undefined,
       added: r.added || undefined,
       libraryId: [r.movieId, r.seriesId, r.artistId].find((n) => typeof n === "number" && n > 0),
+      mediaTitle: r.movie?.title ?? r.series?.title ?? r.artist?.artistName ?? undefined,
+      poster: pickPoster((r.movie ?? r.series ?? r.artist)?.images),
+    };
+  }
+
+  /** Read-only: one library entry, to learn whether a request has been imported yet. */
+  async libraryEntry(id: number): Promise<ArrLibraryEntry> {
+    const r = await httpJson<any>(this.cfg.baseUrl, this.api(`${RESOURCE[this.kind]}/${id}`), { headers: this.hdr() });
+    const stats = r?.statistics ?? {};
+    const fileCount = this.kind === "radarr"
+      ? (r?.hasFile ? 1 : 0)
+      : this.kind === "sonarr" ? numberOrUndefined(stats.episodeFileCount) ?? 0
+      : numberOrUndefined(stats.trackFileCount) ?? 0;
+    return {
+      title: r?.title ?? r?.artistName ?? "unknown",
+      poster: pickPoster(r?.images),
+      fileCount,
+      monitored: !!r?.monitored,
     };
   }
 

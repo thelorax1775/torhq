@@ -828,9 +828,21 @@ its **import mode** (*Move* or *Hardlink* — see
 only makes TorHQ forget it; nothing on disk is deleted, and the removal is
 refused while intake jobs are still queued against it.
 
-**Jobs & activity** — TorHQ's own intake worker, not the \*arr. Filter by status,
-expand a row for that job's history, retry a failed or dead one. The activity
-feed below is the append-only audit log of every action TorHQ took.
+**Activity** — the one place to watch what was asked for arrive. Each item moves
+through requested → searching → downloading → importing → available, with a
+stage stepper, a progress bar and ETA, and who asked. When something stalls it says
+why in plain words and what to do (an import the \*arr refused, a download nobody
+is sharing, a search that found nothing for hours, a download folder the \*arr
+cannot see). Filter by in progress, stalled or done; it refreshes itself. Members
+see their own requests plus other people's in-flight items as generic progress;
+the admin sees everything and each row links to the underlying page. It replaces
+the old split between Downloads, Queue and Jobs, which stay reachable for the
+admin under **Advanced** in the nav.
+
+**Jobs & log** (Advanced, admin) — TorHQ's own intake worker, not the \*arr. Filter
+by status, expand a row for that job's history, retry a failed or dead one. The
+feed below is the append-only audit log of every action TorHQ took
+(`GET /api/activity/log`).
 
 ### System
 

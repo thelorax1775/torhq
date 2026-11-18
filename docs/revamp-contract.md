@@ -117,6 +117,29 @@ restricted to the existing allowlist plus categories qBittorrent already has.
 `deleteWithFiles` is the only destructive action; it must be explicit in the UI
 (typed confirmation) and logged to `activity`.
 
+### `GET /api/activity`
+
+`requireAuth`. The one list behind the Activity page; newest first.
+
+```jsonc
+{ "items": [{ "id": "radarr:7", "kind": "movie", "title": "Dune: Part Two", "artwork": "https://…",
+              "stage": "importing",            // requested | searching | downloading | importing | available
+              "status": "stalled",             // active | stalled | done
+              "progress": 100, "etaSeconds": null, "startedAt": 1794980000000, "requestedBy": "sam",
+              "source": "arr",                 // arr | torrent | slskd | job
+              "stall": { "reason": "…", "fix": "…", "detail": "the *arr's own message (admin only)" },
+              "href": "/queue" }],             // admin only
+  "unavailable": [{ "source": "radarr", "detail": "…" }] }   // admin only
+```
+
+Admin: everything, including raw qBittorrent/slskd downloads and intake jobs the
+*arr do not know about. Member: their own requests, plus other people's *in-flight*
+items as generic progress (no requester, no `href`, no `detail`, and a stall `fix`
+that never points at an admin page). Stalls come from the *arr queue state, the
+download client and, for admins, the failing pipeline checks. Read-only.
+`?limit` is 1-500 (400 otherwise). `GET /api/activity/log` is the raw audit log
+that used to live at this path; it is admin-only.
+
 ### `GET /api/queue`
 
 The *arr side of the same pipeline — merged Radarr/Sonarr/Lidarr queues:

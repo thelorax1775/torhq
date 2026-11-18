@@ -82,7 +82,7 @@ export function requestRoutes(app: FastifyInstance, ctx: AppContext): void {
           kind: "requested",
           service: kind,
           message: `Requested ${created.title} (by ${req.session!.username})`,
-          data: { id: created.id },
+          data: { id: created.id, title: created.title, by: req.session!.username, searched: body.searchNow !== false },
         });
         return { ok: true, id: created.id, title: created.title };
       } catch (e) {
