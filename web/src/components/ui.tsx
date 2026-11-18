@@ -343,13 +343,14 @@ export function Checkbox({ label, checked, onChange, disabled }: {
 
 /* ------------------------------------------------------------------- modal */
 
-export function Modal({ title, onClose, children, footer, labelledBy, wide }: {
+export function Modal({ title, onClose, children, footer, labelledBy, wide, className }: {
   title: ReactNode;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
   labelledBy?: string;
   wide?: boolean;
+  className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -366,7 +367,7 @@ export function Modal({ title, onClose, children, footer, labelledBy, wide }: {
 
   return (
     <div className="scrim-modal" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={cx("modal", wide && "modal-wide")} role="dialog" aria-modal="true" aria-labelledby={labelledBy} ref={ref}>
+      <div className={cx("modal", wide && "modal-wide", className)} role="dialog" aria-modal="true" aria-labelledby={labelledBy} ref={ref}>
         <div className="modal-head">
           <h3 id={labelledBy}>{title}</h3>
           <div style={{ marginLeft: "auto" }}>

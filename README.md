@@ -47,6 +47,7 @@ when an import stalls. The product definition lives in
 
 | Area | Capability |
 | --- | --- |
+| **Search** | The home page. One search box over movies, TV, music, games and books, with kind filter chips, artwork and a status badge per result. A detail sheet has one primary button: *Add* (admin) or *Request* (member). |
 | **Dashboard** | Aggregated service health, qBittorrent downloads grouped by category, \*arr activity (history + wanted/missing), slskd downloads, storage usage, and failed-import surfacing. |
 | **Identify** | Raw search results are put through Radarr, Sonarr and Lidarr's **own parsers** — the same ones that perform imports — so a release row says what it is and offers to route it to the \*arr that will file it. **Gemini** (optional) handles only the names those parsers cannot read. |
 | **Catalogue** | Browse what's trending, popular, top rated and upcoming — movies and TV from **TMDB**, games from **RAWG** — with genre and platform filters, and the titles already in Radarr/Sonarr marked. One click hands a movie or show to **Get** (or **Requests**, for a member) with that exact title chosen; a game goes to a Prowlarr search over the game categories. |
@@ -598,9 +599,24 @@ walkthrough of every endpoint is in [`docs/curl-examples.md`](docs/curl-examples
 
 The sidebar is grouped by what you are trying to do.
 
+### Search (home)
+
+The landing page for everyone. Type once; results from every kind appear in a
+grid (the query and kind chips live in the URL, so a search is a shareable
+link). Click a result for the detail sheet. Its one primary button is **Add**
+for an admin (adds the title to Radarr/Sonarr/Lidarr, then asks that app to run
+its own automatic search) or **Request** for a member. It is disabled, with the
+reason on it, when the title is already available, requested or downloading.
+**Options** shows the quality profile and root folder, prefilled from your saved
+defaults; admins also get **Choose release**, which opens the Get page's release
+picker. Books, audiobooks and games show their result with a plain note that
+adding them isn't set up yet. A source that is down or unconfigured shows why
+above the results instead of hiding. After adding, the badge flips to
+*Requested* and a toast links to the Queue.
+
 ### Dashboard
 
-The landing page, ordered by what actually goes wrong. Pipeline health leads —
+Admin only, at `/dashboard`. Ordered by what actually goes wrong. Pipeline health leads —
 those checks are what silently break imports — then current transfers and queue
 depth, then service health, storage and failed intake jobs. Every card polls
 independently, so one unreachable service degrades to a notice instead of

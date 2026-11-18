@@ -87,6 +87,8 @@ const DefaultsBody = z.object({
   metadataProfileId: z.number().int().positive().optional(),
 });
 
+const AutoSearchBody = z.object({ service: Service, id: z.number().int().positive() });
+
 const TargetsQuery = z.object({ service: Service, id: z.coerce.number().int().positive() });
 
 /** Saved placement defaults for one *arr. */
@@ -280,6 +282,29 @@ export function acquireRoutes(app: FastifyInstance, ctx: AppContext): void {
         ok: true, id: created.id, title: created.title,
         service: body.service, rootFolderPath, qualityProfileId, metadataProfileId,
       };
+    } catch (e) {
+      return reply.code(502).send({ error: arrMessage(e) });
+    }
+  });
+
+  /**
+   * The one-click path: once a title is in its *arr (`prepare`), ask the *arr to
+   * run its own automatic search. The *arr picks and grabs a release by itself,
+   * so this is the opposite of the interactive flow below, where a person chooses.
+   */
+  app.post("/api/acquire/auto-search", guard, async (req, reply) => {
+    const body = AutoSearchBody.parse(req.body);
+    const a = arr(body.service);
+    if (!a) return reply.code(409).send({ error: `${body.service} is not configured` });
+    try {
+      const { command } = await a.automaticSearch(body.id);
+      logActivity({
+        kind: "queued",
+        service: body.service,
+        message: `Asked ${body.service} to search automatically (#${body.id})`,
+        data: { id: body.id, command },
+      });
+      return { ok: true, service: body.service, command };
     } catch (e) {
       return reply.code(502).send({ error: arrMessage(e) });
     }

@@ -7,7 +7,7 @@ export function NotFound() {
         icon="info"
         title="Page not found"
         message="That route doesn't exist in TorHQ."
-        actions={<LinkButton to="/" variant="primary" icon="dashboard">Back to dashboard</LinkButton>}
+        actions={<LinkButton to="/" variant="primary" icon="search">Back to search</LinkButton>}
       />
     </Card>
   );
