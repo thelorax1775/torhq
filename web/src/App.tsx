@@ -18,6 +18,7 @@ import { Dashboard } from "./pages/Dashboard.js";
 import { Acquire } from "./pages/Acquire.js";
 import { Catalogue } from "./pages/Catalogue.js";
 import { Search } from "./pages/Search.js";
+import { Activity } from "./pages/Activity.js";
 import { Downloads } from "./pages/Downloads.js";
 import { Queue } from "./pages/Queue.js";
 import { Requests } from "./pages/Requests.js";
@@ -106,13 +107,14 @@ export function App() {
         <Route path="/catalogue" element={<Catalogue role={me.role} />} />
         <Route path="/get" element={<RequireAdmin role={me.role}><Acquire /></RequireAdmin>} />
         <Route path="/search" element={<RequireAdmin role={me.role}><Search /></RequireAdmin>} />
-        <Route path="/downloads" element={<Downloads />} />
-        <Route path="/queue" element={<Queue />} />
+        <Route path="/activity" element={<Activity role={me.role} />} />
+        <Route path="/downloads" element={<RequireAdmin role={me.role}><Downloads /></RequireAdmin>} />
+        <Route path="/queue" element={<RequireAdmin role={me.role}><Queue /></RequireAdmin>} />
         <Route path="/requests" element={<Requests />} />
         <Route path="/books" element={<Books role={me.role} />} />
         <Route path="/audiobooks" element={<Books role={me.role} kind="audiobook" />} />
         <Route path="/intake" element={<RequireAdmin role={me.role}><Intake /></RequireAdmin>} />
-        <Route path="/jobs" element={<Jobs />} />
+        <Route path="/jobs" element={<RequireAdmin role={me.role}><Jobs /></RequireAdmin>} />
         <Route path="/libraries" element={<RequireAdmin role={me.role}><Libraries /></RequireAdmin>} />
         <Route path="/mounts" element={<RequireAdmin role={me.role}><Mounts /></RequireAdmin>} />
         <Route path="/services" element={<RequireAdmin role={me.role}><Services /></RequireAdmin>} />

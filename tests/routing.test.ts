@@ -225,13 +225,20 @@ describe("query parameters that reach the database", () => {
   // Regression: `limit` went to Drizzle unchecked. SQLite reads a negative
   // LIMIT as "no limit", so this returned the whole activity table, and a
   // non-numeric value reached the driver as NaN and threw.
-  it.each(["-1", "0", "abc", "", "99999"])("rejects ?limit=%s instead of running it", async (limit) => {
-    const r = await app.inject({ method: "GET", url: `/api/activity?limit=${limit}`, headers: { cookie } });
-    expect(r.statusCode).toBe(400);
+  it.each(["/api/activity", "/api/activity/log"])("%s rejects a bad ?limit instead of running it", async (base) => {
+    for (const limit of ["-1", "0", "abc", "", "99999"]) {
+      const r = await app.inject({ method: "GET", url: `${base}?limit=${limit}`, headers: { cookie } });
+      expect(r.statusCode, `${base}?limit=${limit}`).toBe(400);
+    }
   });
 
   it("accepts a sane limit and defaults when absent", async () => {
     for (const url of ["/api/activity", "/api/activity?limit=25"]) {
+      const r = await app.inject({ method: "GET", url, headers: { cookie } });
+      expect(r.statusCode, url).toBe(200);
+      expect(Array.isArray(r.json().items)).toBe(true);
+    }
+    for (const url of ["/api/activity/log", "/api/activity/log?limit=25"]) {
       const r = await app.inject({ method: "GET", url, headers: { cookie } });
       expect(r.statusCode, url).toBe(200);
       expect(Array.isArray(r.json().activity)).toBe(true);

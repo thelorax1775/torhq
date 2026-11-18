@@ -181,7 +181,7 @@ describe("Home search hub", () => {
     await waitFor(() => expect(api.called("POST /api/acquire/auto-search")).toHaveLength(1));
     expect(api.called("POST /api/acquire/prepare")[0]!.body).toMatchObject({ service: "radarr", selectionId: "tmdb:1", term: "tmdb:1" });
     expect(api.called("POST /api/acquire/auto-search")[0]!.body).toEqual({ service: "radarr", id: 77 });
-    expect(await screen.findByRole("link", { name: /Queue/ })).toHaveAttribute("href", "/queue");
+    expect(await screen.findByRole("link", { name: /Activity/ })).toHaveAttribute("href", "/activity");
     const card = screen.getByRole("button", { name: /Dune: Part Two/ });
     expect(within(card).getByText("Requested")).toBeInTheDocument();
   });

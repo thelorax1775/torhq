@@ -258,7 +258,7 @@ export function Home({ role }: { role: "admin" | "member" | null }) {
         <div className="toast" role="status" key={toast.id}>
           <Icon name="check" size={15} />
           <span>{toast.message}</span>
-          <Link to="/queue">Watch it in Queue</Link>
+          <Link to="/activity">Watch it in Activity</Link>
           <Button variant="ghost" size="sm" icon="close" aria-label="Dismiss" onClick={() => setToast(null)} />
         </div>
       )}
