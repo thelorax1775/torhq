@@ -206,7 +206,7 @@ export const openApiDoc = {
         properties: {
           kind: {
             type: "string",
-            enum: ["qbittorrent", "radarr", "sonarr", "lidarr", "prowlarr", "slskd", "jellyfin", "navidrome", "kavita", "torrentsearch"],
+            enum: ["qbittorrent", "radarr", "sonarr", "lidarr", "prowlarr", "slskd", "jellyfin", "navidrome", "kavita", "calibreweb", "torrentsearch"],
           },
           label: { type: "string", minLength: 1, maxLength: 64 },
           baseUrl: { type: "string", format: "uri" },

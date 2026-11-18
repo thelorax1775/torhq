@@ -157,13 +157,63 @@ previewed, approved import.
 
 ---
 
+## Books (ebooks)
+
+No \*arr manages books, so TorHQ's own intake does (see
+[the intake boundary](#the-intake-boundary-torhq-vs-the-arr)). The flow, from the
+**Books** page (admins add; members **Request**):
+
+1. **Search** a title or author (Open Library). Each result says whether you
+   already hold it: Kavita's and Calibre-Web's own searches are asked, so a book
+   in either shows *Available*.
+2. **Request/Add.** A member's request waits for an admin; the admin sees every
+   request and a member sees only their own, without any paths.
+3. **Find a release.** TorHQ searches Prowlarr restricted to the book categories
+   (7000 Books, 7020 Books/EBook, 8000 Other) with *title + author*, and ranks
+   the results **epub > azw3 > mobi > pdf, then seeders**. Releases whose name
+   lacks the title, or with no seeders, never outrank a real match. The best
+   match is pre-selected; the admin accepts it or picks another.
+4. **Grab.** The release goes to qBittorrent under the **`torhq-books`**
+   category, tagged so TorHQ can find that exact torrent again.
+5. **Preview, automatically.** When the download completes (checked every 30 s,
+   and whenever an admin opens the page), TorHQ builds an intake **dry-run
+   preview** against the books library. **Nothing is moved yet.**
+6. **Approve.** One click on *Approve import* queues the normal intake job
+   (previewed, confined to `TORHQ_APPROVED_ROOTS`, retried, logged under Jobs &
+   activity). The item then shows *Available* once Kavita has it.
+
+**Setup**
+
+- **qBittorrent category.** Create `torhq-books` on the Downloads page with a
+  save path **inside an approved root** (e.g. `/srv/torhq/downloads/torhq-books`).
+  If the content is outside the roots, the preview is refused and the item says so.
+- **Books library.** On **Libraries**, add one with *kind* `books`, *target*
+  Kavita, destination = the folder Kavita's Books library watches, staging on the
+  same filesystem. *Move* deletes the finished download after import; *Hardlink*
+  keeps it seeding. (Set Kavita's `libraryId` on its service to trigger a scan;
+  otherwise Kavita's folder watcher picks it up.)
+- **Services.** Prowlarr and qBittorrent are required. Kavita (already an intake
+  target) and optionally **Calibre-Web** are used to answer "do we have it?".
+  `GET /api/books/status` (admin) lists whatever is still missing.
+
+**Calibre-Web: read-only, by design.** Calibre-Web reads a Calibre `metadata.db`
+and a folder tree it owns, and has no watched ingest folder: the only supported
+ways in are its UI upload or `calibredb add`, both of which rewrite
+`metadata.db`. Copying files into that tree from outside leaves the database and
+the disk out of step, so TorHQ does **not** import into Calibre-Web. Books go to
+Kavita; the Calibre-Web adapter (Services → *Calibre-Web*, secret
+`username:password`, OPDS enabled on that account) only reports health and
+answers library searches over OPDS.
+
+---
+
 ## Unified search API (hub)
 
 `GET /api/hub/search?q=&kinds=` searches movies, TV, music, games, books and
 audiobooks at once (movies/TV/music through Radarr/Sonarr/Lidarr lookups, games
 through RAWG, books and audiobooks through Open Library) and reports for each
 result whether you already have it: available, requested, downloading, missing,
-none, or unknown (games and books until a backend can say). `GET /api/hub/item`
+none, or unknown (games until a backend can say; books are answered by Kavita and Calibre-Web, and by TorHQ's own request record). `GET /api/hub/item`
 returns the detail and default add options for one result. Both are open to
 members as well as the admin and are read-only; a source that is down or slow
 shows up under `sources` instead of failing the search. See
@@ -560,8 +610,9 @@ tells you.
    alone, which is what you want when importing off a seeding torrent.
 
 4. **Create qBittorrent categories.** One per *arr, plus one you own:
-   `radarr`, `sonarr`, `lidarr`, `torhq-manual`, and `torhq-games` if you will
-   grab games from the Catalogue. The category is how a finished download is
+   `radarr`, `sonarr`, `lidarr`, `torhq-manual`, `torhq-games` if you will
+   grab games from the Catalogue, and `torhq-books` if you will use the
+   [Books](#books-ebooks) flow (its save path must be inside an approved root). The category is how a finished download is
    attributed to the app that should import it.
 
 5. **Wire qBittorrent into each \*arr.** In Radarr/Sonarr/Lidarr →
@@ -721,6 +772,9 @@ the preview, so a stale preview can never justify a different import. The previe
 also states what will happen to the source — a library in *Move* mode raises an
 explicit warning that the source is about to be deleted. This never touches a
 Radarr/Sonarr/Lidarr library.
+
+**Books** — search, request, pick a release and approve the import preview for
+ebooks; see [Books](#books-ebooks).
 
 **Libraries** — the Kavita/Navidrome destinations intake can target, each with
 its **import mode** (*Move* or *Hardlink* — see

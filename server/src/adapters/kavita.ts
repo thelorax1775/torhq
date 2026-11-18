@@ -1,4 +1,4 @@
-import { httpJson } from "./http.js";
+import { httpJson, HttpError } from "./http.js";
 import type { AdapterConfig, HealthResult, ServiceAdapter } from "./types.js";
 
 /**
@@ -45,6 +45,30 @@ export class KavitaAdapter implements ServiceAdapter {
     await httpJson(this.cfg.baseUrl, "/api/Library/scan", {
       method: "POST", headers: { authorization: `Bearer ${jwt}` }, query: { libraryId: id },
     });
+  }
+
+  /**
+   * Titles Kavita holds that match a search term (Kavita's own search, series
+   * level). Used only to answer "do we already have it?" for the hub.
+   */
+  async searchTitles(term: string): Promise<string[]> {
+    const get = async () => httpJson<{ series?: Array<{ name?: string; originalName?: string; localizedName?: string }> }>(
+      this.cfg.baseUrl, "/api/Search/search",
+      { query: { queryString: term }, headers: { authorization: `Bearer ${await this.token()}` } },
+    );
+    let res;
+    try {
+      res = await get();
+    } catch (e) {
+      if (!(e instanceof HttpError) || e.statusCode !== 401) throw e;
+      this.jwt = null; // the JWT expired: authenticate again, once
+      res = await get();
+    }
+    const out: string[] = [];
+    for (const s of res?.series ?? []) {
+      for (const n of [s.name, s.originalName, s.localizedName]) if (n && !out.includes(n)) out.push(n);
+    }
+    return out;
   }
 
   private configuredLibraryId(): number | undefined {

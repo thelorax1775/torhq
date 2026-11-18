@@ -61,6 +61,7 @@ const KIND_META: Record<string, { label: string; role: string; secretHint: strin
   jellyfin: { label: "Jellyfin", role: "Media server — read-only visibility here.", secretHint: "API token", defaultUrl: "http://127.0.0.1:8096" },
   navidrome: { label: "Navidrome", role: "Music library — an intake target.", secretHint: "username:password", defaultUrl: "http://127.0.0.1:4533" },
   kavita: { label: "Kavita", role: "Books/manga/comics library — an intake target.", secretHint: "API key", defaultUrl: "http://127.0.0.1:5000" },
+  calibreweb: { label: "Calibre-Web", role: "Book library — read-only: used to show which books you already hold. Imports go to Kavita.", secretHint: "username:password (OPDS must be enabled)", defaultUrl: "http://127.0.0.1:8083" },
   torrentsearch: { label: "Torrent-index search", role: "Fallback scraper for one mirror — only needed where Prowlarr has no indexer.", secretHint: "not required", defaultUrl: "https://" },
   websearch: { label: "Web search", role: "General web-search widget alongside torrent search.", secretHint: "not required", defaultUrl: "http://127.0.0.1:8080" },
   tmdb: { label: "TMDB", role: "Catalogue source for movies and TV. Free key from themoviedb.org → Settings → API; either the API key or the read access token works.", secretHint: "API key or read access token", defaultUrl: "https://api.themoviedb.org" },

@@ -21,6 +21,7 @@ import { Search } from "./pages/Search.js";
 import { Downloads } from "./pages/Downloads.js";
 import { Queue } from "./pages/Queue.js";
 import { Requests } from "./pages/Requests.js";
+import { Books } from "./pages/Books.js";
 import { Intake } from "./pages/Intake.js";
 import { Jobs } from "./pages/Jobs.js";
 import { Libraries } from "./pages/Libraries.js";
@@ -108,6 +109,7 @@ export function App() {
         <Route path="/downloads" element={<Downloads />} />
         <Route path="/queue" element={<Queue />} />
         <Route path="/requests" element={<Requests />} />
+        <Route path="/books" element={<Books role={me.role} />} />
         <Route path="/intake" element={<RequireAdmin role={me.role}><Intake /></RequireAdmin>} />
         <Route path="/jobs" element={<Jobs />} />
         <Route path="/libraries" element={<RequireAdmin role={me.role}><Libraries /></RequireAdmin>} />

@@ -30,6 +30,7 @@ export const NAV: Array<{ group: string; items: NavItem[] }> = [
       { to: "/downloads", label: "Downloads", icon: "download" },
       { to: "/queue", label: "Queue", icon: "queue" },
       { to: "/requests", label: "Requests", icon: "star" },
+      { to: "/books", label: "Books", icon: "book" },
     ],
   },
   {

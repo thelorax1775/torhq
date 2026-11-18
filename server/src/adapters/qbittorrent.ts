@@ -22,6 +22,8 @@ export interface QbTorrent {
   size: number;
   eta: number;
   savePath: string;
+  /** Where the data actually is: the file for a single-file torrent, else the root folder. */
+  contentPath: string;
   ratio: number;
   /** Unix seconds, as qBittorrent reports it. */
   addedOn: number;
@@ -79,7 +81,7 @@ export class QbittorrentAdapter implements ServiceAdapter {
     return list.map((t) => ({
       hash: t.hash, name: t.name, category: t.category, state: t.state,
       progress: t.progress, dlspeed: t.dlspeed, upspeed: t.upspeed, size: t.size, eta: t.eta,
-      savePath: t.save_path ?? "", ratio: t.ratio ?? 0, addedOn: t.added_on ?? 0,
+      savePath: t.save_path ?? "", contentPath: t.content_path ?? "", ratio: t.ratio ?? 0, addedOn: t.added_on ?? 0,
       // `tags` is a comma-separated string on the wire; an empty string means none.
       tags: String(t.tags ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     }));
@@ -109,9 +111,11 @@ export class QbittorrentAdapter implements ServiceAdapter {
    * `category` tags ownership: `torhq-manual` for raw grabs, or an *arr's category
    * (radarr/sonarr/lidarr) so that *arr adopts and imports the download.
    */
-  async addTorrent(input: { url: string; category?: string; paused?: boolean }): Promise<void> {
+  async addTorrent(input: { url: string; category?: string; paused?: boolean; tags?: string[] }): Promise<void> {
     const form: Record<string, string> = { urls: input.url };
     if (input.category) form.category = input.category;
+    // A tag is how TorHQ finds its own grab again: the add call returns no hash.
+    if (input.tags?.length) form.tags = input.tags.join(",");
     if (input.paused) form.paused = "true";
     const res = await this.postForm("api/v2/torrents/add", form);
     // qBittorrent replies with the literal body "Ok." on success, "Fails." otherwise.

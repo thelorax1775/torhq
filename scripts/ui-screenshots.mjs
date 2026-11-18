@@ -31,7 +31,7 @@ if (!existsSync(join(root, "server/dist/index.js")) || !existsSync(join(root, "w
 // [path, name, adminOnly]. Keep in step with web/src/App.tsx.
 const PAGES = [
   ["/", "home"], ["/dashboard", "dashboard", true], ["/catalogue", "catalogue"], ["/get", "get", true], ["/search", "search", true],
-  ["/downloads", "downloads"], ["/queue", "queue"], ["/requests", "requests"], ["/intake", "intake", true],
+  ["/downloads", "downloads"], ["/queue", "queue"], ["/requests", "requests"], ["/books", "books"], ["/intake", "intake", true],
   ["/jobs", "jobs"], ["/libraries", "libraries", true], ["/mounts", "mounts", true], ["/services", "services", true],
   ["/settings", "settings", true], ["/users", "users", true], ["/does-not-exist", "not-found"],
 ];

@@ -105,6 +105,42 @@ export const activity = sqliteTable(
   }),
 );
 
+/**
+ * Things someone wants that no *arr owns (ebooks today; audiobooks reuse it).
+ * One row follows a title from a member's request, through the admin's chosen
+ * release, the qBittorrent download, the intake preview awaiting approval, and
+ * the import job. See lib/wanted.ts.
+ */
+export const wantedItems = sqliteTable(
+  "wanted_items",
+  {
+    id: text("id").primaryKey(), // uuid
+    kind: text("kind").notNull().default("book"), // book|audiobook
+    title: text("title").notNull(),
+    author: text("author"),
+    externalId: text("external_id"), // Open Library work id
+    // requested|grabbed|ready|importing|imported|failed|declined
+    status: text("status").notNull().default("requested"),
+    requestedBy: text("requested_by").notNull(),
+    releaseTitle: text("release_title"),
+    releaseFormat: text("release_format"),
+    qbCategory: text("qb_category"),
+    torrentTag: text("torrent_tag"), // torhq-<id>; how the grab is found again in qBittorrent
+    torrentHash: text("torrent_hash"),
+    libraryKey: text("library_key"),
+    sourcePath: text("source_path"),
+    previewJson: text("preview_json"),
+    jobId: text("job_id"),
+    error: text("error"),
+    createdAt: integer("created_at").notNull().default(sql`(unixepoch() * 1000)`),
+    updatedAt: integer("updated_at").notNull().default(sql`(unixepoch() * 1000)`),
+  },
+  (t) => ({
+    byStatus: index("wanted_status_idx").on(t.status),
+    byExternal: index("wanted_external_idx").on(t.externalId),
+  }),
+);
+
 /** Applied forward-only schema migrations (see db/migrate.ts). */
 export const schemaMigrations = sqliteTable("schema_migrations", {
   version: integer("version").primaryKey(),
@@ -116,4 +152,5 @@ export type User = typeof users.$inferSelect;
 export type Service = typeof services.$inferSelect;
 export type Library = typeof libraries.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
+export type WantedItem = typeof wantedItems.$inferSelect;
 export type ActivityRow = typeof activity.$inferSelect;
