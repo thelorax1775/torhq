@@ -154,7 +154,7 @@ export function Settings() {
           <LinkButton to="/services" icon="plug">Services &amp; credentials</LinkButton>
           <LinkButton to="/mounts" icon="server">Mounts &amp; storage</LinkButton>
           <LinkButton to="/libraries" icon="book">Libraries</LinkButton>
-          <LinkButton to="/queue" icon="shield">Pipeline health</LinkButton>
+          <LinkButton to="/transfers" icon="shield">Transfers</LinkButton>
         </div>
       </Card>
     </>

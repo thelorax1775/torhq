@@ -75,7 +75,7 @@ export function Mounts() {
     <>
       <PageHeader
         title="Mounts"
-        subtitle="Network shares bind-mounted into this container, and how full the approved roots are. TorHQ never mounts anything itself."
+        subtitle="The network shares this TorHQ can see and how much space is left where it may write; TorHQ never mounts anything itself."
         actions={<RefreshButton q={mountsQ} />}
       />
 

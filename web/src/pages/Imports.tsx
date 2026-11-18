@@ -1,5 +1,8 @@
 /**
- * Intake — manual staging for the content the *arr stack does not own: books,
+ * Imports to approve — finished book and audiobook downloads wait here, each with
+ * its import preview, until the admin approves (or declines) them. Below that,
+ * the manual intake form: TorHQ's own staging for the content the *arr stack
+ * does not own: books,
  * manga, comics and music going into Kavita/Navidrome. It never touches a
  * Radarr/Sonarr/Lidarr library — those are owned end-to-end by the *arr
  * (search, grab, import, rename, placement), and the destination libraries
@@ -71,7 +74,58 @@ function withinRoots(path: string, roots: string[]): boolean {
   return roots.some((r) => p === r || p.startsWith(r.endsWith("/") ? r : `${r}/`));
 }
 
-export function Intake() {
+interface WaitingItem {
+  id: string; kind: "book" | "audiobook"; title: string; author: string | null; status: string;
+  requestedBy: string; releaseTitle?: string | null;
+  preview?: { destPath: string; targetName: string; totalBytes: number; entries: unknown[]; importMode: string; warnings: string[] } | null;
+}
+
+/** Downloads TorHQ has previewed and that only need a yes or no. */
+function Waiting() {
+  const books = usePolled<{ items: WaitingItem[] }>("/api/books/wanted", 15000);
+  const audiobooks = usePolled<{ items: WaitingItem[] }>("/api/audiobooks/wanted", 15000);
+  const base = (w: WaitingItem) => (w.kind === "audiobook" ? "/api/audiobooks" : "/api/books");
+  const opts = { invalidates: ["/api/books/wanted", "/api/audiobooks/wanted", "/api/attention", "/api/jobs"] };
+  const approve = useMutation((w: WaitingItem) => apiSend(`${base(w)}/wanted/${w.id}/approve`, "POST"), opts);
+  const decline = useMutation((w: WaitingItem) => apiSend(`${base(w)}/wanted/${w.id}/decline`, "POST"), opts);
+  const ready = [...(books.data?.items ?? []), ...(audiobooks.data?.items ?? [])].filter((w) => w.status === "ready");
+  const loading = books.initial || audiobooks.initial;
+
+  return (
+    <Card title="Waiting for your OK" icon="check" subtitle="Each one has been checked against your libraries; nothing moves until you approve it.">
+      {approve.error && <Alert tone="err" title="Couldn't approve it">{approve.error}</Alert>}
+      {decline.error && <Alert tone="err" title="Couldn't decline it">{decline.error}</Alert>}
+      {loading ? null : ready.length === 0 ? (
+        <EmptyState icon="inbox" title="Nothing waiting" message="When a book or audiobook finishes downloading, it shows up here with exactly what will be imported and where." />
+      ) : (
+        <ul className="list" aria-label="Imports waiting for approval">
+          {ready.map((w) => (
+            <li key={w.id} className="list-row" style={{ alignItems: "flex-start" }}>
+              <Badge tone="info">{w.kind === "audiobook" ? "Audiobook" : "Book"}</Badge>
+              <div className="grow" style={{ minWidth: 0 }}>
+                <div><strong>{w.title}</strong>{w.author ? <span className="muted"> · {w.author}</span> : null}</div>
+                <div className="small muted">requested by {w.requestedBy}{w.releaseTitle ? ` · ${w.releaseTitle}` : ""}</div>
+                {w.preview && (
+                  <div className="small mt-2">
+                    Goes to <span className="mono break">{w.preview.destPath}</span> · {bytes(w.preview.totalBytes)}
+                    {w.preview.importMode === "move" ? " · the download is moved, not copied" : " · hardlinked, the download keeps seeding"}
+                    {w.preview.warnings.map((m, i) => <div key={i} className="warn-text">{m}</div>)}
+                  </div>
+                )}
+                <div className="row mt-2">
+                  <Button size="sm" variant="primary" icon="check" pending={approve.pending} onClick={() => void approve.run(w)}>Approve import</Button>
+                  <Button size="sm" variant="danger" icon="close" pending={decline.pending} onClick={() => void decline.run(w)}>Decline</Button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+export function Imports() {
   const libsQ = usePolled<LibrariesResponse>("/api/libraries");
   const rootsQ = usePolled<RootsResponse>("/api/config/roots");
   const jobsQ = usePolled<JobsResponse>("/api/jobs", 15000);
@@ -119,9 +173,14 @@ export function Intake() {
   return (
     <>
       <PageHeader
-        title="Intake"
-        subtitle="Stage completed files into a Kavita or Navidrome library. Never point this at a Radarr/Sonarr/Lidarr folder — the *arr own those completely."
+        title="Imports to approve"
+        subtitle="Finished book and audiobook downloads wait here for your OK before TorHQ files them; you can also import a folder by hand."
       />
+
+      <Waiting />
+
+      <h3 className="section-title">Import files by hand</h3>
+      <p className="small muted">For books, comics, manga or music already on disk. Radarr, Sonarr and Lidarr file their own downloads, so never point this at their folders.</p>
 
       {libraries.length === 0 && !libsQ.loading ? (
         <Card>
@@ -133,7 +192,7 @@ export function Intake() {
           />
         </Card>
       ) : (
-        <Card title="Stage an import" icon="inbox">
+        <Card title="Choose what to import" icon="inbox">
           <div className="grid-2">
             <SelectField label="Destination library" value={key} onChange={(e) => { setLibraryKey(e.target.value); setPreviewedFor(null); preview.reset(); }}>
               {libraries.map((l) => <option key={l.key} value={l.key}>{l.label} ({l.kind} → {l.targetService})</option>)}
@@ -193,7 +252,7 @@ export function Intake() {
           {commit.error && <Alert tone="err" title="Import failed">{commit.error}</Alert>}
           {commit.data && (
             <Alert tone="ok" title="Queued">
-              Job {commit.data.jobId.slice(0, 8)} is {commit.data.status}. Track it below or on the Jobs page.
+              Job {commit.data.jobId.slice(0, 8)} is {commit.data.status}. Track it below or on History.
             </Alert>
           )}
         </Card>
@@ -231,15 +290,15 @@ export function Intake() {
       )}
 
       <Card
-        title="Recent intake jobs"
-        subtitle="What this page has queued lately — full history and retries live on the Jobs page."
+        title="Recent imports"
+        subtitle="What was imported lately; retries live on History."
         icon="clock"
-        actions={<LinkButton to="/jobs" size="sm">Open Jobs</LinkButton>}
+        actions={<LinkButton to="/history" size="sm">Open History</LinkButton>}
       >
         <Async q={jobsQ} what="jobs">
           {() => (
             intakeJobs.length === 0 ? (
-              <EmptyState icon="clock" title="No intake jobs yet" message="Imports queued from this page will show up here." />
+              <EmptyState icon="clock" title="No imports yet" message="Imports you approve or start here show up here." />
             ) : (
               <div className="list">
                 {intakeJobs.map((j) => (

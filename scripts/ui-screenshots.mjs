@@ -30,9 +30,10 @@ if (!existsSync(join(root, "server/dist/index.js")) || !existsSync(join(root, "w
 
 // [path, name, adminOnly]. Keep in step with web/src/App.tsx.
 const PAGES = [
-  ["/", "home"], ["/dashboard", "dashboard", true], ["/discover", "discover"], ["/get", "get", true], ["/search", "search", true],
-  ["/activity", "activity"], ["/downloads", "downloads", true], ["/queue", "queue", true], ["/requests", "requests"], ["/books", "books"], ["/audiobooks", "audiobooks"], ["/intake", "intake", true],
-  ["/jobs", "jobs", true], ["/libraries", "libraries", true], ["/mounts", "mounts", true], ["/services", "services", true],
+  ["/", "home"], ["/dashboard", "dashboard", true], ["/discover", "discover"], ["/search", "search", true],
+  ["/activity", "activity"], ["/activity?view=requests", "activity-requests", true], ["/transfers", "transfers", true],
+  ["/history", "history", true], ["/books", "books"], ["/audiobooks", "audiobooks"], ["/imports", "imports", true],
+  ["/libraries", "libraries", true], ["/mounts", "mounts", true], ["/services", "services", true],
   ["/settings", "settings", true], ["/users", "users", true], ["/does-not-exist", "not-found"],
 ];
 const VIEWPORTS = [[1280, 800], [390, 844]];
@@ -88,6 +89,10 @@ try {
   const { csrfToken } = await reg.json();
   const cookie = reg.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
   await post("/api/users", MEMBER, cookie, csrfToken);
+  // One member book request, so Activity's Requests tab and the nav badge have something to show.
+  const ml = await post("/api/auth/login", MEMBER);
+  const mCookie = ml.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+  await post("/api/books/request", { title: "Frankenstein", author: "Mary Shelley" }, mCookie, (await ml.json()).csrfToken);
 
   browser = await puppeteer.launch({
     executablePath: chromium, headless: true,
@@ -109,8 +114,8 @@ try {
     await page.click("button[type=submit]");
     await page.waitForSelector(".shell", { timeout: 15000 });
 
-    // Member sees every non-admin page; admin-only ones bounce to /requests,
-    // which is itself worth a picture, so they are skipped to keep names honest.
+    // Member sees every non-admin page; admin-only ones bounce to Search,
+    // which is already pictured, so they are skipped to keep names honest.
     const pages = PAGES.filter(([, , adminOnly]) => who === "admin" || !adminOnly);
     for (const [w, h] of VIEWPORTS) {
       await page.setViewport({ width: w, height: h });

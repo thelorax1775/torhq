@@ -8,7 +8,7 @@ function renderAt(role: "admin" | "member" | null) {
     <MemoryRouter initialEntries={["/users"]}>
       <Routes>
         <Route path="/users" element={<RequireAdmin role={role}><div>admin page</div></RequireAdmin>} />
-        <Route path="/requests" element={<div>member home</div>} />
+        <Route path="/" element={<div>member home</div>} />
       </Routes>
     </MemoryRouter>,
   );

@@ -93,7 +93,7 @@ export function Libraries() {
     <>
       <PageHeader
         title="Libraries"
-        subtitle="Where manual intake copies books, manga, comics and music. Radarr, Sonarr and Lidarr manage their own libraries and never go through this."
+        subtitle="The folders TorHQ files books, comics, manga, audiobooks and music into when it imports them itself; Radarr, Sonarr and Lidarr keep their own libraries."
         actions={<RefreshButton q={q} />}
       />
 

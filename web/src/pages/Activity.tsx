@@ -2,16 +2,21 @@
  * Activity — the one place to watch what was asked for arrive.
  *
  * Each item moves through requested -> searching -> downloading -> importing ->
- * available, and a stalled one says why in plain words with the fix. This merges
- * what used to be split across Downloads, Queue and Jobs; an admin's rows link
- * through to those pages (now under Advanced) for the underlying detail.
+ * available, and a stalled one says why in plain words with the fix. An admin's
+ * rows link through to Transfers or History for the underlying detail, and the
+ * admin also gets a Requests tab: member requests that wait for them (books and
+ * audiobooks, which have no *arr to search by itself) with Approve / Decline.
+ *
+ * `?item=<id>` (from Transfers) highlights one row; `?view=requests` opens the tab.
  */
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { apiSend } from "../lib/api.js";
+import { useMutation } from "../lib/useMutation.js";
 import { usePolled } from "../lib/usePolled.js";
 import { eta, ago } from "../lib/format.js";
 import {
-  Alert, Async, Badge, EmptyState, PageHeader, ProgressBar, RefreshButton, StaleNotice, cx, type Tone,
+  Alert, Async, Badge, Button, EmptyState, LinkButton, PageHeader, ProgressBar, RefreshButton, StaleNotice, cx, type Tone,
 } from "../components/ui.js";
 import { Icon } from "../components/Icon.js";
 
@@ -42,7 +47,7 @@ const STAGE_LABEL: Record<Stage, string> = {
 const KIND_LABEL: Record<string, string> = {
   movie: "Movie", tv: "TV", music: "Music", book: "Book", comic: "Comic", audiobook: "Audiobook", game: "Game", other: "Download",
 };
-type Filter = "all" | "active" | "stalled" | "done";
+type Filter = "all" | "active" | "stalled" | "done" | "requests";
 const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: "all", label: "All" }, { id: "active", label: "In progress" },
   { id: "stalled", label: "Stalled" }, { id: "done", label: "Done" },
@@ -65,7 +70,11 @@ export function Stepper({ stage, status }: { stage: Stage; status: ActivityItem[
   );
 }
 
-function Row({ item, isAdmin }: { item: ActivityItem; isAdmin: boolean }) {
+export interface PendingRequest {
+  id: string; kind: "book" | "audiobook"; title: string; author: string | null; requestedBy: string; createdAt: number;
+}
+
+function Row({ item, isAdmin, focused }: { item: ActivityItem; isAdmin: boolean; focused?: boolean }) {
   const tone: Tone = item.status === "stalled" ? "warn" : item.status === "done" ? "ok" : "accent";
   const barTone = item.status === "stalled" ? "warn" : item.status === "done" ? "ok" : undefined;
   const meta = [
@@ -74,7 +83,12 @@ function Row({ item, isAdmin }: { item: ActivityItem; isAdmin: boolean }) {
     ago(item.startedAt),
   ].filter(Boolean).join(" · ");
   return (
-    <li className={cx("activity-row", item.status)} data-stage={item.stage} data-status={item.status}>
+    <li
+      className={cx("activity-row", item.status, focused && "focused")}
+      data-stage={item.stage} data-status={item.status} data-id={item.id}
+      aria-current={focused ? "true" : undefined}
+      ref={focused ? (el) => el?.scrollIntoView?.({ block: "center" }) : undefined}
+    >
       {item.artwork
         ? <img className="activity-art" src={item.artwork} alt="" loading="lazy" />
         : <div className="activity-art activity-art-empty" aria-hidden="true"><Icon name="download" size={18} /></div>}
@@ -110,34 +124,55 @@ function Row({ item, isAdmin }: { item: ActivityItem; isAdmin: boolean }) {
 
 export function Activity({ role }: { role: "admin" | "member" | null }) {
   const isAdmin = role === "admin";
+  const [params, setParams] = useSearchParams();
   const q = usePolled<ActivityResponse>("/api/activity", 5000);
-  const [filter, setFilter] = useState<Filter>("all");
+  const pending = usePolled<{ items: PendingRequest[] }>(isAdmin ? "/api/requests/pending" : null, 15000);
+  const view = params.get("view");
+  const filter: Filter = view === "requests" ? (isAdmin ? "requests" : "all")
+    : FILTERS.find((f) => f.id === view)?.id ?? "all";
+  const setFilter = (f: Filter) => setParams((p) => {
+    const next = new URLSearchParams(p);
+    if (f === "all") next.delete("view"); else next.set("view", f);
+    next.delete("item");
+    return next;
+  }, { replace: true });
 
   return (
     <>
       <PageHeader
         title="Activity"
-        subtitle="Everything you asked for, from request to ready."
+        subtitle={isAdmin
+          ? "Everything that was asked for, from request to ready, and the requests waiting for your OK."
+          : "Everything you asked for, from request to ready."}
         actions={<RefreshButton q={q} />}
       />
       <StaleNotice q={q} />
       <Async q={q} what="activity">
-        {(data) => <List data={data} filter={filter} setFilter={setFilter} isAdmin={isAdmin} />}
+        {(data) => (
+          <List
+            data={data} filter={filter} setFilter={setFilter} isAdmin={isAdmin}
+            pending={pending.data?.items ?? null} focus={params.get("item")}
+          />
+        )}
       </Async>
     </>
   );
 }
 
-function List({ data, filter, setFilter, isAdmin }: {
+function List({ data, filter, setFilter, isAdmin, pending, focus }: {
   data: ActivityResponse; filter: Filter; setFilter: (f: Filter) => void; isAdmin: boolean;
+  pending: PendingRequest[] | null; focus: string | null;
 }) {
   const counts = useMemo(() => ({
     all: data.items.length,
     active: data.items.filter((i) => i.status === "active").length,
     stalled: data.items.filter((i) => i.status === "stalled").length,
     done: data.items.filter((i) => i.status === "done").length,
-  }), [data.items]);
-  const shown = filter === "all" ? data.items : data.items.filter((i) => i.status === filter);
+    requests: pending?.length ?? 0,
+  }), [data.items, pending]);
+  const shown = filter === "all" || filter === "requests" ? data.items : data.items.filter((i) => i.status === filter);
+  const filters = isAdmin ? [...FILTERS, { id: "requests" as const, label: "Requests" }] : FILTERS;
+  const focusMissing = focus != null && !data.items.some((i) => i.id === focus);
 
   return (
     <>
@@ -147,13 +182,15 @@ function List({ data, filter, setFilter, isAdmin }: {
         </Alert>
       )}
       <div className="chips toolbar" role="group" aria-label="Filter activity">
-        {FILTERS.map((f) => (
+        {filters.map((f) => (
           <button key={f.id} type="button" className={cx("chip", filter === f.id && "on")} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
             {f.label} <span className="num">{counts[f.id]}</span>
           </button>
         ))}
       </div>
-      {shown.length === 0 ? (
+      {filter === "requests" ? (
+        <Requests items={pending} />
+      ) : shown.length === 0 ? (
         <EmptyState
           icon="activity"
           title={data.items.length === 0 ? "Nothing yet" : "Nothing here"}
@@ -163,9 +200,81 @@ function List({ data, filter, setFilter, isAdmin }: {
         />
       ) : (
         <ul className="activity-list" aria-label="Activity">
-          {shown.map((i) => <Row key={i.id} item={i} isAdmin={isAdmin} />)}
+          {shown.map((i) => <Row key={i.id} item={i} isAdmin={isAdmin} focused={i.id === focus} />)}
         </ul>
       )}
+      {focusMissing && filter !== "requests" && (
+        <p className="small muted mt-3">That transfer isn't something anyone asked for through TorHQ, so it has no Activity entry; it is still on Transfers.</p>
+      )}
+    </>
+  );
+}
+
+const PENDING_KIND: Record<PendingRequest["kind"], { label: string; page: string }> = {
+  book: { label: "Book", page: "/books" }, audiobook: { label: "Audiobook", page: "/audiobooks" },
+};
+
+/**
+ * Member requests that wait for the admin. Approve has TorHQ grab the best
+ * matching release (the same ranking the Books page pre-selects); Decline closes
+ * the request. Movie, TV and music requests never wait here: Radarr, Sonarr and
+ * Lidarr start searching for those by themselves.
+ */
+function Requests({ items }: { items: PendingRequest[] | null }) {
+  const [done, setDone] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const opts = { invalidates: ["/api/requests/pending", "/api/attention", "/api/activity"] };
+  const approve = useMutation((id: string) => apiSend<{ ok: true; release: string }>(`/api/requests/pending/${id}/approve`, "POST"), opts);
+  const decline = useMutation((id: string) => apiSend<{ ok: true }>(`/api/requests/pending/${id}/decline`, "POST"), opts);
+  useEffect(() => { setErrors({}); }, [items?.length]);
+
+  async function act(kind: "approve" | "decline", r: PendingRequest) {
+    const res = kind === "approve" ? await approve.run(r.id) : await decline.run(r.id);
+    if (res.ok) {
+      setDone((d) => ({ ...d, [r.id]: kind === "approve" ? `Approved: downloading "${(res.data as { release?: string }).release ?? r.title}".` : "Declined." }));
+    } else {
+      setErrors((e) => ({ ...e, [r.id]: res.error }));
+    }
+  }
+
+  if (items == null) return <EmptyState icon="star" title="Loading requests…" />;
+  const notes = Object.entries(done);
+  if (items.length === 0) {
+    return (
+      <>
+        {notes.map(([id, msg]) => <Alert key={id} tone="ok">{msg}</Alert>)}
+        <EmptyState
+          icon="star" title="No requests waiting"
+          message="When a friend asks for a book or an audiobook it waits here for your OK. Movies, TV and music go straight to Radarr, Sonarr and Lidarr, which start looking by themselves."
+        />
+      </>
+    );
+  }
+  return (
+    <>
+      {notes.map(([id, msg]) => <Alert key={id} tone="ok">{msg}</Alert>)}
+      <ul className="activity-list" aria-label="Requests waiting for you">
+        {items.map((r) => (
+          <li key={r.id} className="activity-row" data-id={r.id}>
+            <div className="activity-art activity-art-empty" aria-hidden="true"><Icon name={r.kind === "audiobook" ? "play" : "book"} size={18} /></div>
+            <div className="activity-main">
+              <div className="activity-head">
+                <h3 className="activity-title">{r.title}</h3>
+                <Badge tone="info">Waiting for you</Badge>
+              </div>
+              <div className="activity-meta small muted">
+                {[PENDING_KIND[r.kind].label, r.author, `requested by ${r.requestedBy}`, ago(r.createdAt)].filter(Boolean).join(" · ")}
+              </div>
+              {errors[r.id] && <Alert tone="err" title="Couldn't approve it">{errors[r.id]}</Alert>}
+              <div className="row mt-2">
+                <Button size="sm" variant="primary" icon="check" pending={approve.pending} onClick={() => void act("approve", r)}>Approve</Button>
+                <Button size="sm" variant="danger" icon="close" pending={decline.pending} onClick={() => void act("decline", r)}>Decline</Button>
+                <LinkButton size="sm" variant="ghost" to={PENDING_KIND[r.kind].page}>Choose the release yourself</LinkButton>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
     </>
   );
 }

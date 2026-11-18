@@ -340,14 +340,35 @@ searches one, and triggers `POST /api/libraries/{id}/scan`. Libraries accept
 
 ---
 
+## 3e. Requests waiting for the admin — `pendingRoutes` in `server/src/routes/books.ts`
+
+Backs Activity's **Requests** tab and the admin nav badges. Movie, TV and music
+requests go straight to Radarr/Sonarr/Lidarr (which search by themselves), so the
+only member requests that wait for the admin are books and audiobooks in
+`requested`. All four routes are **admin** (a member gets 403).
+
+| Route | Access | Notes |
+| --- | --- | --- |
+| `GET /api/requests/pending` | **admin** | `{ items: [{ id, kind (book\|audiobook), title, author, externalId, requestedBy, createdAt }] }`, newest first. No paths. |
+| `POST /api/requests/pending/:id/approve` | **admin** + CSRF | Searches Prowlarr exactly like `…/wanted/:id/search` and grabs the best-ranked release like `…/wanted/:id/grab`. `{ ok, release, item }`. 409 when the item is no longer `requested`, when Prowlarr/qBittorrent is not configured, or when no release matches the title with seeders (nothing is grabbed; choose one on the Books/Audiobooks page). |
+| `POST /api/requests/pending/:id/decline` | **admin** + CSRF | Marks it `declined`. 409 when it is no longer `requested`. |
+| `GET /api/attention` | **admin** | `{ requests, imports }`: requests waiting (above) and book/audiobook downloads in `ready` (waiting on *Imports to approve*). Polled by the nav for its badges. |
+
+---
+
 ## 4. SPA — `web/`
 
 React 18 + Vite + `react-router-dom` v6 (already in `web/package.json` and the
 lockfile — **do not add other dependencies**). Single origin, session cookie,
 CSRF header via the existing `web/src/lib/api.ts` helper.
 
-Routes: `/` search hub (admin and member), `/dashboard` (admin), `/search` (raw search), `/downloads`, `/queue`, `/requests`,
-`/intake`, `/jobs`, `/libraries`, `/mounts`, `/services`, `/settings`.
+Routes: `/` search hub (admin and member), `/discover`, `/activity` (admin: `?view=requests`
+opens the Requests tab, `?item=<id>` highlights one row), and for the admin `/transfers`,
+`/history`, `/imports`, `/libraries`, `/mounts`, `/services`, `/settings`, `/users`;
+`/search` (raw indexer search, linked from the bottom of hub results), `/dashboard`, `/books`
+and `/audiobooks` stay routed but are not in the nav. Old URLs redirect: `/get` -> `/`,
+`/requests` -> `/activity?view=requests` (a member: `/activity`), `/downloads` and `/queue`
+-> `/transfers`, `/jobs` -> `/history`, `/intake` -> `/imports`, `/catalogue` -> `/discover`.
 Deep links must work on reload — the server already falls back to `index.html`
 for non-`/api` paths.
 

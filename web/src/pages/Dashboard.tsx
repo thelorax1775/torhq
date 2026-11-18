@@ -17,7 +17,7 @@ import {
   ProgressBar, Stat, StatusDot, type Tone,
 } from "../components/ui.js";
 import { Icon } from "../components/Icon.js";
-import { STATE_META } from "./Downloads.js";
+import { TORRENT_STATE as STATE_META } from "./Transfers.js";
 
 interface PipelineCheck {
   id: string;
@@ -130,7 +130,7 @@ export function Dashboard() {
         title="Pipeline health"
         subtitle="Can a completed grab actually reach the right *arr, in a directory it can see?"
         icon="shield"
-        actions={<LinkButton to="/queue" icon="external" size="sm">Full details</LinkButton>}
+        actions={<LinkButton to="/transfers" icon="external" size="sm">Full details</LinkButton>}
       >
         <Async q={pipeline} what="pipeline checks">
           {(data) => {
@@ -166,7 +166,7 @@ export function Dashboard() {
                 ))}
                 {broken.length > 5 && (
                   <div className="small muted" style={{ padding: "8px 0 0" }}>
-                    …and {broken.length - 5} more on the Queue page.
+                    …and {broken.length - 5} more on the Transfers page.
                   </div>
                 )}
               </div>
@@ -177,7 +177,7 @@ export function Dashboard() {
 
       {/* Priority 2: what's actually moving right now. */}
       <div className="grid-2">
-        <Card title="Downloads" icon="download" actions={<LinkButton to="/downloads" icon="external" size="sm">Open</LinkButton>}>
+        <Card title="Downloads" icon="download" actions={<LinkButton to="/transfers" icon="external" size="sm">Open</LinkButton>}>
           <Async q={downloads} what="qBittorrent data">
             {(data) => {
               const active = data.torrents.filter((t) => !t.state.startsWith("paused") && t.progress < 1);
@@ -218,7 +218,7 @@ export function Dashboard() {
           </Async>
         </Card>
 
-        <Card title="Arr queue" icon="queue" actions={<LinkButton to="/queue" icon="external" size="sm">Open</LinkButton>}>
+        <Card title="Arr queue" icon="queue" actions={<LinkButton to="/transfers" icon="external" size="sm">Open</LinkButton>}>
           <Async q={queue} what="the *arr queue">
             {(data) => {
               const broken = data.items.filter(queueItemBroken);
@@ -309,7 +309,7 @@ export function Dashboard() {
           </Async>
         </Card>
 
-        <Card title="Failed jobs" icon="alert" actions={<LinkButton to="/jobs" icon="external" size="sm">Open</LinkButton>}>
+        <Card title="Failed jobs" icon="alert" actions={<LinkButton to="/history" icon="external" size="sm">Open</LinkButton>}>
           <Async q={failures} what="job failures">
             {(data) => (
               data.failed.length === 0 ? (
@@ -338,8 +338,7 @@ export function Dashboard() {
       <Card title="Get something new">
         <div className="row">
           <LinkButton to="/search" icon="search" variant="primary">Search for a release</LinkButton>
-          <LinkButton to="/downloads" icon="download">Downloads</LinkButton>
-          <LinkButton to="/queue" icon="queue">Queue</LinkButton>
+          <LinkButton to="/transfers" icon="download">Transfers</LinkButton>
         </div>
       </Card>
     </>
