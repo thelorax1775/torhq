@@ -26,6 +26,7 @@ const { setWantedDepsForTest } = await import("../server/src/routes/books.js");
 const { hubSearch, libraryHolds } = await import("../server/src/lib/hub.js");
 const { parseOpdsTitles } = await import("../server/src/adapters/calibreweb.js");
 const { Worker } = await import("../server/src/queue/queue.js");
+const { normalizeReleases } = await import("../server/src/adapters/prowlarr.js");
 
 const rel = (over: Record<string, unknown>) => ({
   guid: "g", indexerId: 1, indexer: "idx", title: "Dune - Frank Herbert (epub)", size: 1_000_000,
@@ -235,6 +236,21 @@ describe("books flow: request -> grab -> download -> preview -> approve", () => 
     expect(r.statusCode).toBe(200);
     expect(added).toEqual([{ url: MAGNET_B, category: "torhq-books", tags: [tagFor(id)] }]);
     expect(getWanted(id)).toMatchObject({ status: "grabbed", releaseFormat: "epub", qbCategory: "torhq-books" });
+  });
+
+  it("grabs a public-indexer release whose magnet was only in the Prowlarr guid", async () => {
+    const guid = "magnet:?xt=urn:btih:" + "c".repeat(40) + "&dn=Dune";
+    const [r] = normalizeReleases([{
+      guid, indexerId: 7, indexer: "The Pirate Bay", title: "Dune Frank Herbert epub", seeders: 9, protocol: "torrent",
+      magnetUrl: "http://prowlarr:9696/7/download?apikey=SECRET&link=abc&file=Dune",
+      categories: [{ id: 7020, name: "Books/EBook" }],
+    }]);
+    expect(JSON.stringify(r)).not.toContain("SECRET");
+    const id = await request();
+    const res = await post(`/api/books/wanted/${id}/grab`, adminCookie, adminCsrf,
+      { guid: r!.guid, indexerId: r!.indexerId, ...(r!.magnetUrl ? { magnet: r!.magnetUrl } : {}), title: r!.title });
+    expect(res.statusCode).toBe(200);
+    expect(added).toEqual([{ url: guid, category: "torhq-books", tags: [tagFor(id)] }]);
   });
 
   it("a re-grab drops the old torrent: the preview is built from the new release, not the first", async () => {

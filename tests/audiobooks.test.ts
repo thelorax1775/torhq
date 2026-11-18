@@ -33,6 +33,7 @@ const { reconcileWanted, getWanted, tagFor } = await import("../server/src/lib/w
 const { setWantedDepsForTest } = await import("../server/src/routes/books.js");
 const { hubSearch } = await import("../server/src/lib/hub.js");
 const { Worker } = await import("../server/src/queue/queue.js");
+const { normalizeReleases } = await import("../server/src/adapters/prowlarr.js");
 
 beforeEach(() => httpJson.mockReset());
 
@@ -261,6 +262,21 @@ describe("audiobooks flow: request -> grab -> download -> preview -> approve -> 
     expect((await grab(id)).statusCode).toBe(200);
     expect(added).toEqual([{ url: MAGNET, category: "torhq-audiobooks", tags: [tagFor(id)] }]);
     expect(getWanted(id)).toMatchObject({ status: "grabbed", releaseFormat: "m4b", qbCategory: "torhq-audiobooks" });
+  });
+
+  it("grabs a public-indexer (TPB/Knaben-style) release whose magnet was only in the Prowlarr guid", async () => {
+    const guid = "magnet:?xt=urn:btih:" + "c".repeat(40) + "&dn=Dune";
+    const [r] = normalizeReleases([{
+      guid, indexerId: 7, indexer: "Knaben", title: "Dune Frank Herbert LibriVox m4b", seeders: 9, protocol: "torrent",
+      magnetUrl: "http://prowlarr:9696/7/download?apikey=SECRET&link=abc&file=Dune",
+      categories: [{ id: 3030, name: "Audio/Audiobook" }],
+    }]);
+    expect(JSON.stringify(r)).not.toContain("SECRET");
+    const id = await request();
+    const res = await post(`/api/audiobooks/wanted/${id}/grab`, adminCookie, adminCsrf,
+      { guid: r!.guid, indexerId: r!.indexerId, ...(r!.magnetUrl ? { magnet: r!.magnetUrl } : {}), title: r!.title });
+    expect(res.statusCode).toBe(200);
+    expect(added).toEqual([{ url: guid, category: "torhq-audiobooks", tags: [tagFor(id)] }]);
   });
 
   it("an ebook id on an audiobook route (and the reverse) is a 404, never a cross-kind action", async () => {
