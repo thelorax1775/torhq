@@ -449,6 +449,27 @@ npm run dev:web
 
 Open <http://localhost:5173> and create the admin account.
 
+### Testing the web UI
+
+`npm test` runs the server suite (`tests/`) and the web suite (`web/src/**/*.test.tsx`,
+Vitest + Testing Library on jsdom); CI runs the same command. Web tests use
+`mockApi()` from `web/src/test/mockApi.ts`, which stubs `fetch` for `/api/*`
+(`mockApi({ "POST /api/auth/login": { status: 401, body: { error: "nope" } } })`)
+and records the calls it receives.
+
+`scripts/ui-screenshots.mjs` is a manual smoke check, not part of CI. After
+`npm run build` it starts the built app on a random port against a temp data dir
+and throwaway master key, seeds an admin and a member, signs in as each in
+headless Chromium, and saves a PNG of every routed page at 1280px and 390px:
+
+```bash
+CHROMIUM_PATH=/path/to/chrome node scripts/ui-screenshots.mjs ./screenshots
+# files: screenshots/{admin,member}/<page>-{1280,390}.png
+```
+
+No services are configured, so pages show their empty states. It exits non-zero
+if a page throws.
+
 ### Useful scripts
 
 | Command | What it does |
@@ -958,8 +979,8 @@ docs/              API curl examples + the revamp contract
 
 Active. Single-maintainer homelab project, developed and deployed on a Proxmox
 LXC. Recent work covers the Catalogue (TMDB/RAWG), admin and member accounts,
-and self-update from GitHub. The Vitest suite covers the server; the web UI has
-no automated tests. Integrations are only as verified as the services they were
+and self-update from GitHub. The Vitest suite covers the server, and the web UI has a
+test harness with a first set of tests (more arrive with each page rebuild). Integrations are only as verified as the services they were
 tested against, so treat any adapter you have not run yourself as unverified.
 
 ---
