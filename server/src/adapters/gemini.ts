@@ -191,9 +191,9 @@ export class GeminiAdapter implements ServiceAdapter {
    * out that a configured model name is one this key cannot use — which
    * otherwise shows up as a failure on the first real request.
    */
-  async models(): Promise<string[]> {
+  async models(timeoutMs = 15_000): Promise<string[]> {
     const res = await httpJson<{ models?: Array<{ name?: string; supportedGenerationMethods?: string[] }> }>(
-      this.baseUrl, "/v1beta/models", { headers: this.hdr(), query: { pageSize: 200 }, timeoutMs: 15_000 },
+      this.baseUrl, "/v1beta/models", { headers: this.hdr(), query: { pageSize: 200 }, timeoutMs },
     );
     return (res.models ?? [])
       // Only models that can answer a generateContent call are of any use here.
@@ -205,7 +205,8 @@ export class GeminiAdapter implements ServiceAdapter {
   async health(): Promise<HealthResult> {
     const start = Date.now();
     try {
-      const available = await this.models();
+      // Short: one dead provider must not hold the whole health response.
+      const available = await this.models(8_000);
       const latencyMs = Date.now() - start;
       if (!available.length) {
         return { healthy: false, detail: "the key reached Google but can use no models", latencyMs };
