@@ -218,8 +218,12 @@ unknown kind is a 400.
   not in the library = `none`. Movie/tv/music use Radarr/Sonarr/Lidarr. If the
   *arr is not configured, movie/tv fall back to TMDB metadata with
   `status: "unknown"`. Games (RAWG) and books/audiobooks (Open Library) are
-  `unknown` until a backend can say what is held; books/audiobooks are also
-  `actionable: false` until a book grab path exists. File state is read from the
+  `unknown` until a backend can say what is held. **Books** are answered by Kavita
+  (`/api/Search/search`) and Calibre-Web (OPDS search) when configured, plus
+  TorHQ's own wanted record (requested/downloading/available); a book is
+  `actionable` only when Prowlarr and qBittorrent are configured and it is not
+  held or on its way. Audiobooks stay `actionable: false` until their grab path
+  exists. File state is read from the
   title's own library record (`/movie/{id}`, `/series/{id}`, `/artist/{id}`),
   because `/lookup` does not report it. A TMDB-only show has no TVDB
   id, so it is `actionable: false`.
@@ -249,6 +253,34 @@ Errors: 400 bad id for the kind, 404 not found, 409 owner app not configured,
   `qualityProfileId` are now **optional**. Omitted, the saved defaults apply,
   then the *arr's first root folder/quality profile (and first metadata profile
   for Lidarr), so a member never has to know a server path.
+
+---
+
+## 3c. Books — `server/src/routes/books.ts`, `lib/books.ts`, `lib/wanted.ts`
+
+The one kind with no *arr: TorHQ's own intake imports it (docs/vision.md). A
+`wanted_items` row follows a title `requested -> grabbed -> ready -> importing ->
+imported` (or `failed` / `declined`). qBittorrent category: `torhq-books`.
+
+| Route | Access | Notes |
+| --- | --- | --- |
+| `POST /api/books/request` | any user + CSRF | `{ title, author?, externalId? (OL…W) }`. Duplicate (same work id or title+author) returns `{ existing: true }` and the existing item. |
+| `GET /api/books/wanted` | any user | Admin: all items, with `releaseTitle`, `error`, `jobId` and the intake `preview` (paths). Member: only their own, `id/title/author/status/…` with **no paths**. An admin read also advances finished downloads to `ready`. |
+| `GET /api/books/status` | **admin** | `{ prowlarr, qbittorrent, category, categoryExists, library, ready, problems[] }` |
+| `POST /api/books/wanted/:id/search` | **admin** + CSRF | Prowlarr search, categories `7000,7020,8000`, query = title + author. Returns `{ query, releases[] (format, matches, alive), bestGuid }` ranked epub > azw3 > mobi > pdf, then seeders; usenet dropped. |
+| `POST /api/books/wanted/:id/grab` | **admin** + CSRF | `{ guid, indexerId, title, magnet? \| downloadUrl? }`; adds to qBittorrent category `torhq-books` with tag `torhq-wanted-<id>`. Magnets are validated; Prowlarr download URLs are origin-checked. |
+| `POST /api/books/wanted/:id/approve` | **admin** + CSRF | Only valid in `ready`. Re-runs the dry run, then queues the normal `manual_intake` job (idempotency key `wanted:<id>`). **The only call that causes a file move.** 409 otherwise. |
+| `POST /api/books/wanted/:id/decline` | **admin** + CSRF | Marks the request declined. |
+
+When a tagged torrent finishes, TorHQ calls `previewIntake` (approved roots,
+symlink checks) against the first library with `kind: books` and `targetService:
+kavita`; the stored preview is what the admin approves. A source outside the
+approved roots never gets a preview; the item stays `grabbed` with the reason in
+`error`.
+
+New service kind `calibreweb` (secret `username:password`, OPDS): `health` and
+library title search only. Calibre-Web has no safe ingest path, so it is never an
+intake target.
 
 ---
 

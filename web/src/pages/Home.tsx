@@ -12,7 +12,7 @@
  * "Choose release" hands an admin to the Get page's release picker.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { apiSend } from "../lib/api.js";
 import { useMutation } from "../lib/useMutation.js";
 import { usePolled } from "../lib/usePolled.js";
@@ -76,8 +76,11 @@ function blockedReason(r: HubResult): string | null {
   if (r.status === "available") return "Already available";
   if (r.status === "downloading") return "Already downloading";
   if (r.status === "requested") return "Already requested";
-  if (r.kind === "book" || r.kind === "audiobook") {
-    return "Adding books and audiobooks isn't set up yet: TorHQ has no book grab path so far, so there is nothing to send this to.";
+  if (r.kind === "audiobook") {
+    return "Adding audiobooks isn't set up yet: TorHQ has no audiobook grab path so far, so there is nothing to send this to.";
+  }
+  if (r.kind === "book" && !r.actionable) {
+    return "Adding books isn't set up yet: it needs Prowlarr and qBittorrent under Services.";
   }
   if (r.kind === "game") {
     return "Adding games from here isn't set up yet. An admin can still grab one from Raw search.";
@@ -290,11 +293,33 @@ function DetailSheet({ result, isAdmin, onClose, onAdded }: {
   const shownRoot = root || defaults?.rootFolderPath || "";
   const shownMeta = metaProfile === "" ? defaults?.metadataProfileId ?? "" : metaProfile;
 
-  const blocked = blockedReason(result);
+
+  const navigate = useNavigate();
+  const isBook = result.kind === "book";
+  // A downloaded book waits for one click; the hub shows that click for admins.
+  const wantedQ = usePolled<{ items: Array<{ id: string; externalId: string | null; status: string }> }>(
+    isAdmin && isBook && (result.status === "downloading" || result.status === "requested") ? "/api/books/wanted" : null,
+  );
+  const readyId = wantedQ.data?.items.find((w) => w.externalId === result.id && w.status === "ready")?.id;
+  const approve = useMutation(
+    (id: string) => apiSend(`/api/books/wanted/${id}/approve`, "POST"),
+    { invalidates: ["/api/books/wanted", "/api/hub/search"] },
+  );
+
+  const blocked = readyId ? null : blockedReason(result);
+
   const itemFailed = itemQ.error && !item;
   const disabledReason = blocked ?? (itemFailed ? itemQ.error!.message : null);
 
   const add = useMutation(async () => {
+    if (isBook) {
+      await apiSend("/api/books/request", "POST", {
+        title: result.title,
+        author: result.subtitle?.split(",")[0]?.trim() || undefined,
+        externalId: /^OL\d+W$/.test(result.id) ? result.id : undefined,
+      });
+      return;
+    }
     const term = lookupTerm(result);
     if (isAdmin) {
       const prepared = await apiSend<{ id: number; service: "radarr" | "sonarr" | "lidarr" }>("/api/acquire/prepare", "POST", {
@@ -315,7 +340,17 @@ function DetailSheet({ result, isAdmin, onClose, onAdded }: {
   });
 
   async function onPrimary() {
+    if (readyId) {
+      const a = await approve.run(readyId);
+      if (a.ok) onAdded(result, "downloading", `Approved the import of "${result.title}".`);
+      return;
+    }
     const r = await add.run();
+    if (r.ok && isBook) {
+      onAdded(result, "requested", isAdmin ? `Requested "${result.title}".` : `Requested "${result.title}". An admin will pick a release.`);
+      if (isAdmin) navigate("/books"); // the release picker lives there
+      return;
+    }
     if (r.ok) {
       onAdded(result, "requested", isAdmin
         ? `Added "${result.title}". ${ARR_NAME[result.owner]} is searching for it.`
@@ -344,12 +379,12 @@ function DetailSheet({ result, isAdmin, onClose, onAdded }: {
           )}
           <Button
             variant="primary"
-            icon={disabledReason ? undefined : "plus"}
-            pending={add.pending}
+            icon={disabledReason ? undefined : readyId ? "check" : "plus"}
+            pending={add.pending || approve.pending}
             disabled={disabledReason !== null}
             onClick={() => void onPrimary()}
           >
-            {blocked && (result.status === "available" || result.status === "requested" || result.status === "downloading")
+            {readyId ? "Approve import" : blocked && (result.status === "available" || result.status === "requested" || result.status === "downloading")
               ? blocked
               : disabledReason ? `${label} unavailable` : label}
           </Button>
@@ -372,7 +407,7 @@ function DetailSheet({ result, isAdmin, onClose, onAdded }: {
       {disabledReason && !["available", "requested", "downloading"].includes(result.status) && (
         <Alert tone="info" title="Can't be added yet">{disabledReason}</Alert>
       )}
-      {add.error && <Alert tone="err" title="Couldn't add it">{add.error}</Alert>}
+      {(add.error || approve.error) && <Alert tone="err" title="Couldn't add it">{add.error ?? approve.error}</Alert>}
 
       {showOptions && arrOwned && !blocked && (
         <div className="stack options-panel" aria-label="Options">

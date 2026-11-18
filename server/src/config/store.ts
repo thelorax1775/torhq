@@ -6,7 +6,7 @@ import { mergeExtra, safeExtra } from "./extra.js";
 
 export const SERVICE_KINDS = [
   "qbittorrent", "radarr", "sonarr", "lidarr", "prowlarr",
-  "slskd", "jellyfin", "navidrome", "kavita", "torrentsearch", "websearch", "gemini",
+  "slskd", "jellyfin", "navidrome", "kavita", "calibreweb", "torrentsearch", "websearch", "gemini",
   "tmdb", "rawg",
 ] as const;
 export type ServiceKind = (typeof SERVICE_KINDS)[number];

@@ -5,6 +5,9 @@ import { makeContext } from "./lib/context.js";
 import { buildApp } from "./app.js";
 import { Worker } from "./queue/queue.js";
 import { purgeExpiredSessions } from "./auth/session.js";
+import { getAdapter } from "./adapters/registry.js";
+import type { QbittorrentAdapter } from "./adapters/qbittorrent.js";
+import { reconcileWanted } from "./lib/wanted.js";
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -22,12 +25,26 @@ async function main(): Promise<void> {
   const cleanup = setInterval(() => purgeExpiredSessions(), 60 * 60 * 1000);
   cleanup.unref?.();
 
+  // Books: turn finished `torhq-books` downloads into intake previews. Read-only
+  // until an admin approves; see lib/wanted.ts.
+  let reconciling = false;
+  const books = setInterval(() => {
+    if (reconciling) return;
+    reconciling = true;
+    void reconcileWanted({
+      qb: () => getAdapter("qbittorrent", ctx.masterKey) as QbittorrentAdapter | null,
+      approvedRoots: env.approvedRoots,
+    }).catch((e) => app.log.warn({ err: e }, "books reconcile failed")).finally(() => { reconciling = false; });
+  }, 30_000);
+  books.unref?.();
+
   await app.listen({ host: env.TORHQ_HOST, port: env.TORHQ_PORT });
 
   const shutdown = async (sig: string) => {
     app.log.info({ sig }, "shutting down");
     worker.stop();
     clearInterval(cleanup);
+    clearInterval(books);
     await app.close();
     process.exit(0);
   };
