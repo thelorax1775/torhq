@@ -5,6 +5,9 @@ import type { ArrAdapter } from "../adapters/arr.js";
 import type { TmdbAdapter } from "../adapters/tmdb.js";
 import type { RawgAdapter } from "../adapters/rawg.js";
 import { openLibraryWork, searchOpenLibrary } from "../adapters/openlibrary.js";
+import type { KavitaAdapter } from "../adapters/kavita.js";
+import type { CalibreWebAdapter } from "../adapters/calibreweb.js";
+import { wantedByExternalId } from "../lib/wanted.js";
 import { getServiceDecrypted } from "../config/store.js";
 import { HUB_KINDS, HubItemError, hubItem, hubSearch, type HubDeps, type HubKind } from "../lib/hub.js";
 import type { AppContext } from "../lib/context.js";
@@ -46,6 +49,23 @@ function realDeps(ctx: AppContext): HubDeps {
     openLibrary: {
       search: (q) => searchOpenLibrary(q, 10, SOURCE_TIMEOUT_MS),
       work: (id) => openLibraryWork(id, SOURCE_TIMEOUT_MS),
+    },
+    books: {
+      ready: () => getAdapter("prowlarr", ctx.masterKey) !== null && getAdapter("qbittorrent", ctx.masterKey) !== null,
+      // Kavita and Calibre-Web answer in parallel; either one holding it is enough, and
+      // null means neither is configured (so nothing can say whether we hold it).
+      libraryTitles: async (q) => {
+        const kavita = getAdapter("kavita", ctx.masterKey) as KavitaAdapter | null;
+        const calibre = getAdapter("calibreweb", ctx.masterKey) as CalibreWebAdapter | null;
+        if (!kavita && !calibre) return null;
+        const answers = await Promise.allSettled([kavita?.searchTitles(q), calibre?.searchTitles(q)]);
+        if (answers.every((a) => a.status === "rejected")) throw new Error("no library answered");
+        return answers.flatMap((a) => (a.status === "fulfilled" && a.value ? a.value : []));
+      },
+      wanted: (id) => {
+        const w = wantedByExternalId(id);
+        return w ? { status: w.status as never } : undefined;
+      },
     },
     savedDefaults: (service) => {
       const extra = (getServiceDecrypted(service, ctx.masterKey)?.extra ?? {}) as Record<string, unknown>;

@@ -108,6 +108,35 @@ const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 3,
+    name: "wanted_items",
+    up: (db) => db.exec(`
+      CREATE TABLE IF NOT EXISTS wanted_items (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL DEFAULT 'book',
+        title TEXT NOT NULL,
+        author TEXT,
+        external_id TEXT,
+        status TEXT NOT NULL DEFAULT 'requested',
+        requested_by TEXT NOT NULL,
+        release_title TEXT,
+        release_format TEXT,
+        qb_category TEXT,
+        torrent_tag TEXT,
+        torrent_hash TEXT,
+        library_key TEXT,
+        source_path TEXT,
+        preview_json TEXT,
+        job_id TEXT,
+        error TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+        updated_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000)
+      );
+      CREATE INDEX IF NOT EXISTS wanted_status_idx ON wanted_items(status);
+      CREATE INDEX IF NOT EXISTS wanted_external_idx ON wanted_items(external_id);
+    `),
+  },
   // Future schema changes go here as new numbered migrations, e.g.:
   // { version: 3, name: "jobs_add_started_at",
   //   up: (db) => { if (!hasColumn(db, "jobs", "started_at")) db.exec("ALTER TABLE jobs ADD COLUMN started_at INTEGER"); } },

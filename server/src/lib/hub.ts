@@ -2,6 +2,7 @@ import type { ArrAdapter, ArrAlbum, ArrLookupHit, ArrQueueItem, ArrSeason } from
 import { HttpError } from "../adapters/http.js";
 import type { CatalogueDetail, CatalogueItem, CataloguePage } from "../adapters/catalogue.js";
 import type { OpenLibraryWork } from "../adapters/openlibrary.js";
+import type { WantedStatus } from "./wanted.js";
 
 /**
  * The hub: one search across every media kind, and one detail view, both
@@ -73,6 +74,17 @@ export interface HubDeps {
   openLibrary: {
     search(q: string): Promise<OpenLibraryWork[]>;
     work(id: string): Promise<OpenLibraryWork | null>;
+  };
+  /**
+   * Books only (optional: without it books stay `unknown` and not actionable).
+   * `libraryTitles` asks Kavita and/or Calibre-Web what they hold, or null when
+   * neither is configured. `wanted` is TorHQ's own request/grab record.
+   */
+  books?: {
+    /** True when Prowlarr and qBittorrent are configured, so an Add can actually run. */
+    ready(): boolean;
+    libraryTitles(q: string): Promise<string[] | null>;
+    wanted(externalId: string): { status: WantedStatus } | undefined;
   };
   /** Saved placement defaults for an *arr (from its service config). */
   savedDefaults(service: "radarr" | "sonarr" | "lidarr"): { rootFolderPath?: string; qualityProfileId?: number; metadataProfileId?: number };
@@ -154,14 +166,52 @@ function fromCatalogue(kind: "movie" | "tv" | "game", item: CatalogueItem, owner
   };
 }
 
-function fromBook(kind: "book" | "audiobook", w: OpenLibraryWork): HubResult {
+/** Case/punctuation/article-insensitive form, for "is this the same book". */
+function normTitle(s: string): string {
+  return s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ").replace(/^(the|a|an) /, "").trim();
+}
+
+/** A library entry is this book when its name is the title, optionally followed by the author. */
+export function libraryHolds(libraryTitles: string[], title: string, author?: string): boolean {
+  const want = new Set([normTitle(title)]);
+  if (author) {
+    want.add(normTitle(`${title} ${author}`));
+    want.add(normTitle(`${title} by ${author}`));
+    want.add(normTitle(`${author} ${title}`));
+  }
+  return libraryTitles.some((t) => want.has(normTitle(t)));
+}
+
+const WANTED_STATUS: Record<WantedStatus, HubStatus> = {
+  requested: "requested", grabbed: "downloading", ready: "downloading", importing: "downloading",
+  imported: "available", failed: "requested", declined: "none",
+};
+
+function bookStatus(w: OpenLibraryWork, held: string[] | null, wanted: { status: WantedStatus } | undefined): HubStatus {
+  if (held && libraryHolds(held, w.title, w.author)) return "available";
+  if (wanted) return WANTED_STATUS[wanted.status];
+  return held ? "none" : "unknown";
+}
+
+function fromBook(
+  kind: "book" | "audiobook", w: OpenLibraryWork,
+  books?: { ready: boolean; held: string[] | null; wanted?: { status: WantedStatus } },
+): HubResult {
+  // Audiobooks have no grab path yet, and a book without a configured grab path would be a dead button.
+  const status: HubStatus = kind === "book" && books ? bookStatus(w, books.held, books.wanted) : "unknown";
   return {
     kind, id: w.id, title: w.title, year: w.year, subtitle: w.author, poster: w.poster, overview: w.overview,
-    // No backend knows what the library holds yet; say so instead of guessing.
-    status: "unknown", owner: "intake",
-    // No book grab path exists yet, so offering an Add would be a dead button.
-    actionable: false,
+    status, owner: "intake",
+    actionable: kind === "book" && !!books && actionableFor(status, books.ready),
   };
+}
+
+/** What the libraries hold for a book search; a library that is down is "unknown", never an error. */
+async function bookContext(deps: HubDeps, q: string): Promise<{ ready: boolean; held: string[] | null } | undefined> {
+  if (!deps.books) return undefined;
+  const held = await deps.books.libraryTitles(q).catch(() => null);
+  return { ready: deps.books.ready(), held };
 }
 
 async function searchKind(deps: HubDeps, kind: HubKind, q: string): Promise<HubResult[]> {
@@ -189,7 +239,10 @@ async function searchKind(deps: HubDeps, kind: HubKind, q: string): Promise<HubR
       if (!r) throw new SourceUnavailable("RAWG is not configured. Add an API key under Services.");
       return (await r.search(q)).items.map((i) => fromCatalogue("game", i, deps.prowlarrConfigured()));
     }
-    case "book":
+    case "book": {
+      const [works, ctx] = await Promise.all([deps.openLibrary.search(q), bookContext(deps, q)]);
+      return works.map((w) => fromBook(kind, w, ctx && { ...ctx, wanted: deps.books!.wanted(w.id) }));
+    }
     case "audiobook":
       return (await deps.openLibrary.search(q)).map((w) => fromBook(kind, w));
   }
@@ -284,8 +337,10 @@ export async function hubItem(deps: HubDeps, kind: HubKind, id: string, isAdmin:
 
   const w = await run(deps.openLibrary.work(id));
   if (!w) throw new HubItemError("not found", 404);
+  // The work record carries no author; the search by title does, and is what the library check needs.
+  const ctx = kind === "book" ? await run(bookContext(deps, w.title).then((c) => c ?? null)) : null;
   return {
-    ...fromBook(kind, w), genres: [],
+    ...fromBook(kind, w, ctx ? { ...ctx, wanted: deps.books!.wanted(id) } : undefined), genres: [],
     addOptions: { service: "intake", monitored: false, searchNow: false, basis: "none" },
   };
 }
