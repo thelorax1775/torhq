@@ -175,6 +175,67 @@ download it already owns. TorHQ never moves the files itself.
 
 ---
 
+## 3b. Hub search — `server/src/routes/hub.ts`, `server/src/lib/hub.ts`
+
+One search across every media kind, and the detail behind a result. Read-only,
+`requireAuth` only: **admin and member** both may call it. Nothing here adds,
+grabs or moves anything; adding stays with the owner app (docs/vision.md,
+"Who owns what").
+
+### `GET /api/hub/search?q=<term>&kinds=movie,tv,music,game,book,audiobook`
+
+`q` is required (1-256 chars). `kinds` is optional (omitted = all six); an
+unknown kind is a 400.
+
+```jsonc
+{
+  "results": [{
+    "kind": "movie",             // movie | tv | music | game | book | audiobook
+    "id": "tmdb:693134",         // pass back to /api/hub/item. tmdb:N movie, tvdb:N tv, mbid:X music,
+                                 // RAWG id game, Open Library work id (OL…W) book/audiobook
+    "title": "Dune: Part Two", "year": 2024, "subtitle": "Legendary", "poster": "https://…",
+    "overview": "…",
+    "status": "available",       // available | requested | downloading | missing | none | unknown
+    "owner": "radarr",           // radarr | sonarr | lidarr | intake | prowlarr
+    "actionable": false          // owner can take it and it is not already held/on its way
+  }],
+  "sources": [{ "kind": "movie", "available": true },
+              { "kind": "book", "available": false, "detail": "timed out after 6s" }]
+}
+```
+
+- Each kind is queried **in parallel** with a per-source timeout (6 s). A slow,
+  unconfigured or failing source yields `sources[].available=false` with a short
+  human reason and never fails the request (it is always 200). `detail` never
+  contains URLs, hosts, keys or upstream bodies.
+- `results` is interleaved round-robin across kinds in the order movie, tv,
+  music, game, book, audiobook (each kind keeps its source's own relevance
+  order, max 8 per kind), so no kind buries the rest. `sources` has one row per
+  requested kind, in that canonical order.
+- **Status** comes from the owning app: a lookup hit with a library id is in the
+  library; with files = `available`; monitored and no files = `requested`;
+  unmonitored and no files = `missing`; in the *arr's queue = `downloading`;
+  not in the library = `none`. Movie/tv/music use Radarr/Sonarr/Lidarr. If the
+  *arr is not configured, movie/tv fall back to TMDB metadata with
+  `status: "unknown"`. Games (RAWG) and books/audiobooks (Open Library) are
+  `unknown` until a backend can say what is held. A TMDB-only show has no TVDB
+  id, so it is `actionable: false`.
+
+### `GET /api/hub/item?kind=<kind>&id=<id>`
+
+Detail for the sheet: `{ "item": { …the result fields…, "backdrop", "genres",
+"libraryId" (the *arr's id when held), "seasons" (tv), "albums" (music, when in
+the library), "addOptions" } }`.
+
+`addOptions` is what the server would use for a one-click add:
+`{ service, qualityProfileId, metadataProfileId (lidarr), rootFolderPath, monitored, searchNow, basis }`.
+`basis` is `saved` (the *arr's saved defaults), `arr-first` (the *arr's first
+profile/root folder) or `none`. **`rootFolderPath` is returned to admins only.**
+Errors: 400 bad id for the kind, 404 not found, 409 owner app not configured,
+502 source failed/timed out.
+
+---
+
 ## 4. SPA — `web/`
 
 React 18 + Vite + `react-router-dom` v6 (already in `web/package.json` and the
