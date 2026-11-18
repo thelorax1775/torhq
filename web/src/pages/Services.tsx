@@ -61,6 +61,7 @@ const KIND_META: Record<string, { label: string; role: string; secretHint: strin
   jellyfin: { label: "Jellyfin", role: "Media server — read-only visibility here.", secretHint: "API token", defaultUrl: "http://127.0.0.1:8096" },
   navidrome: { label: "Navidrome", role: "Music library — an intake target.", secretHint: "username:password", defaultUrl: "http://127.0.0.1:4533" },
   kavita: { label: "Kavita", role: "Books/manga/comics library — an intake target.", secretHint: "API key", defaultUrl: "http://127.0.0.1:5000" },
+  audiobookshelf: { label: "Audiobookshelf", role: "Audiobook library — an intake target; shows which audiobooks you already hold.", secretHint: "API token (Settings → API Keys)", defaultUrl: "http://127.0.0.1:13378" },
   calibreweb: { label: "Calibre-Web", role: "Book library — read-only: used to show which books you already hold. Imports go to Kavita.", secretHint: "username:password (OPDS must be enabled)", defaultUrl: "http://127.0.0.1:8083" },
   torrentsearch: { label: "Torrent-index search", role: "Fallback scraper for one mirror — only needed where Prowlarr has no indexer.", secretHint: "not required", defaultUrl: "https://" },
   websearch: { label: "Web search", role: "General web-search widget alongside torrent search.", secretHint: "not required", defaultUrl: "http://127.0.0.1:8080" },
@@ -171,6 +172,9 @@ const EXTRA_FIELDS: Partial<Record<string, ExtraField[]>> = {
   ],
   kavita: [
     { key: "libraryId", kind: "number", label: "Kavita library ID (optional)", placeholder: "3", hint: "When set, intake triggers an explicit scan of this library after import." },
+  ],
+  audiobookshelf: [
+    { key: "libraryId", kind: "text", label: "Audiobookshelf library ID (optional)", placeholder: "b13523dc-…", hint: "The library to search and scan. Blank uses the first book library." },
   ],
   slskd: [
     { key: "webhookToken", kind: "text", secret: true, label: "Webhook token", hint: "Authenticates the completed-download webhook. Leave blank to keep the current token." },

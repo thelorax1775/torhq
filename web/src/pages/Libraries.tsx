@@ -16,8 +16,8 @@ import {
   RefreshButton, SelectField, TableWrap, TextField,
 } from "../components/ui.js";
 
-type LibraryKind = "books" | "manga" | "comics" | "music";
-type TargetService = "kavita" | "navidrome";
+type LibraryKind = "books" | "manga" | "comics" | "music" | "audiobooks";
+type TargetService = "kavita" | "navidrome" | "audiobookshelf";
 type ImportMode = "move" | "link";
 
 interface Library {
@@ -33,11 +33,11 @@ interface Library {
 interface LibrariesResponse { libraries: Library[] }
 interface RootsResponse { approvedRoots: string[] }
 
-const KIND_LABEL: Record<LibraryKind, string> = { books: "Books", manga: "Manga", comics: "Comics", music: "Music" };
-const TARGET_LABEL: Record<TargetService, string> = { kavita: "Kavita", navidrome: "Navidrome" };
+const KIND_LABEL: Record<LibraryKind, string> = { books: "Books", manga: "Manga", comics: "Comics", music: "Music", audiobooks: "Audiobooks" };
+const TARGET_LABEL: Record<TargetService, string> = { kavita: "Kavita", navidrome: "Navidrome", audiobookshelf: "Audiobookshelf" };
 const MODE_LABEL: Record<ImportMode, string> = { move: "Move", link: "Hardlink" };
-/** Kavita serves books/manga/comics; Navidrome serves music. Not a user choice. */
-const targetFor = (kind: LibraryKind): TargetService => (kind === "music" ? "navidrome" : "kavita");
+/** Kavita serves books/manga/comics; Navidrome serves music; Audiobookshelf serves audiobooks. Not a user choice. */
+const targetFor = (kind: LibraryKind): TargetService => (kind === "music" ? "navidrome" : kind === "audiobooks" ? "audiobookshelf" : "kavita");
 
 type FormState = Omit<Library, "targetService">;
 const EMPTY_FORM: FormState = {
@@ -189,7 +189,7 @@ export function Libraries() {
             label="Content kind"
             value={form.kind}
             onChange={(e) => set("kind", e.target.value as LibraryKind)}
-            hint={`Routes to ${TARGET_LABEL[target]} — Kavita serves books/manga/comics, Navidrome serves music.`}
+            hint={`Routes to ${TARGET_LABEL[target]} — Kavita serves books/manga/comics, Navidrome serves music, Audiobookshelf serves audiobooks.`}
           >
             {(Object.keys(KIND_LABEL) as LibraryKind[]).map((k) => <option key={k} value={k}>{KIND_LABEL[k]}</option>)}
           </SelectField>

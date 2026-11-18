@@ -222,8 +222,9 @@ unknown kind is a 400.
   (`/api/Search/search`) and Calibre-Web (OPDS search) when configured, plus
   TorHQ's own wanted record (requested/downloading/available); a book is
   `actionable` only when Prowlarr and qBittorrent are configured and it is not
-  held or on its way. Audiobooks stay `actionable: false` until their grab path
-  exists. File state is read from the
+  held or on its way. **Audiobooks** are answered the same way by Audiobookshelf
+  (`POST /api/libraries/{id}/search`) and TorHQ's own record (kind `audiobook`);
+  see 3d. File state is read from the
   title's own library record (`/movie/{id}`, `/series/{id}`, `/artist/{id}`),
   because `/lookup` does not report it. A TMDB-only show has no TVDB
   id, so it is `actionable: false`.
@@ -281,6 +282,38 @@ approved roots never gets a preview; the item stays `grabbed` with the reason in
 New service kind `calibreweb` (secret `username:password`, OPDS): `health` and
 library title search only. Calibre-Web has no safe ingest path, so it is never an
 intake target.
+
+
+---
+
+## 3d. Audiobooks — second flow in `server/src/routes/books.ts`, `lib/audiobooks.ts`, `adapters/audiobookshelf.ts`
+
+The same routes and state machine as 3c, mounted under `/api/audiobooks/*`, with
+`wanted_items.kind = "audiobook"`. Every `:id` route 404s for an item of the other
+kind. Access levels are identical to 3c: request/list are any user (request needs
+CSRF); `status`, `search`, `grab`, `approve`, `decline` are **admin**.
+
+| Route | Access |
+| --- | --- |
+| `POST /api/audiobooks/request` | any user + CSRF |
+| `GET /api/audiobooks/wanted` | any user (admin: all + preview; member: own, no paths) |
+| `GET /api/audiobooks/status` | **admin** |
+| `POST /api/audiobooks/wanted/:id/search` | **admin** + CSRF. Prowlarr category `3030`; ranked m4b > m4a > mp3 > flac > ogg, then seeders. |
+| `POST /api/audiobooks/wanted/:id/grab` | **admin** + CSRF. qBittorrent category `torhq-audiobooks`. |
+| `POST /api/audiobooks/wanted/:id/approve` | **admin** + CSRF. Queues the previewed intake job; the worker then asks Audiobookshelf to scan. |
+| `POST /api/audiobooks/wanted/:id/decline` | **admin** + CSRF |
+
+Completion builds the preview against the first library with `kind: audiobooks`
+and `targetService: audiobookshelf`. The intake payload gains an optional
+`destSubdir` (`Author`, or `Author/Title` for a lone file); each segment is
+sanitised and the composed destination re-validated against the approved roots.
+`GET /api/hub/search?kinds=audiobook` reports `available` from ABS's library
+search, otherwise from the wanted record; `actionable` needs Prowlarr and qBittorrent.
+
+New service kind `audiobookshelf` (secret = API token, sent as `Bearer`; extra
+`{ libraryId? }`). `health` is `POST /api/authorize`; the adapter lists libraries,
+searches one, and triggers `POST /api/libraries/{id}/scan`. Libraries accept
+`kind: audiobooks` / `targetService: audiobookshelf`.
 
 ---
 

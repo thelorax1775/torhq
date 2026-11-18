@@ -8,6 +8,7 @@ import { SlskdAdapter } from "./slskd.js";
 import { JellyfinAdapter } from "./jellyfin.js";
 import { NavidromeAdapter } from "./navidrome.js";
 import { KavitaAdapter } from "./kavita.js";
+import { AudiobookshelfAdapter } from "./audiobookshelf.js";
 import { CalibreWebAdapter } from "./calibreweb.js";
 import { TorrentSearchAdapter } from "./torrentsearch.js";
 import { WebSearchAdapter } from "./websearch.js";
@@ -18,7 +19,7 @@ import type { AdapterConfig, HealthResult, ServiceAdapter } from "./types.js";
 
 export type AnyAdapter =
   | ArrAdapter | QbittorrentAdapter | ProwlarrAdapter | SlskdAdapter
-  | JellyfinAdapter | NavidromeAdapter | KavitaAdapter | CalibreWebAdapter | TorrentSearchAdapter
+  | JellyfinAdapter | NavidromeAdapter | KavitaAdapter | AudiobookshelfAdapter | CalibreWebAdapter | TorrentSearchAdapter
   | WebSearchAdapter | GeminiAdapter | TmdbAdapter | RawgAdapter;
 
 function build(kind: string, cfg: AdapterConfig): AnyAdapter {
@@ -32,6 +33,7 @@ function build(kind: string, cfg: AdapterConfig): AnyAdapter {
     case "jellyfin": return new JellyfinAdapter(cfg);
     case "navidrome": return new NavidromeAdapter(cfg);
     case "kavita": return new KavitaAdapter(cfg);
+    case "audiobookshelf": return new AudiobookshelfAdapter(cfg);
     case "calibreweb": return new CalibreWebAdapter(cfg);
     case "torrentsearch": return new TorrentSearchAdapter(cfg);
     case "websearch": return new WebSearchAdapter(cfg);

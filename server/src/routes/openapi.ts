@@ -206,7 +206,7 @@ export const openApiDoc = {
         properties: {
           kind: {
             type: "string",
-            enum: ["qbittorrent", "radarr", "sonarr", "lidarr", "prowlarr", "slskd", "jellyfin", "navidrome", "kavita", "calibreweb", "torrentsearch"],
+            enum: ["qbittorrent", "radarr", "sonarr", "lidarr", "prowlarr", "slskd", "jellyfin", "navidrome", "kavita", "audiobookshelf", "calibreweb", "torrentsearch"],
           },
           label: { type: "string", minLength: 1, maxLength: 64 },
           baseUrl: { type: "string", format: "uri" },
@@ -252,8 +252,8 @@ export const openApiDoc = {
         properties: {
           key: { type: "string", pattern: "^[a-z0-9-]+$", maxLength: 64 },
           label: { type: "string", minLength: 1, maxLength: 64 },
-          kind: { type: "string", enum: ["books", "manga", "comics", "music"] },
-          targetService: { type: "string", enum: ["kavita", "navidrome"] },
+          kind: { type: "string", enum: ["books", "manga", "comics", "music", "audiobooks"] },
+          targetService: { type: "string", enum: ["kavita", "navidrome", "audiobookshelf"] },
           destPath: { type: "string", description: "Must resolve inside an approved root." },
           stagingPath: { type: "string", description: "Must be inside an approved root, on the same filesystem as destPath." },
           rescan: { type: "boolean" },

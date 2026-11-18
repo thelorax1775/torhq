@@ -52,8 +52,8 @@ export const libraries = sqliteTable("libraries", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   key: text("key").notNull().unique(), // e.g. kavita-books, kavita-manga, navidrome-music
   label: text("label").notNull(),
-  kind: text("kind").notNull(), // books|manga|comics|music
-  targetService: text("target_service").notNull(), // kavita|navidrome
+  kind: text("kind").notNull(), // books|manga|comics|music|audiobooks
+  targetService: text("target_service").notNull(), // kavita|navidrome|audiobookshelf
   destPath: text("dest_path").notNull(), // must be inside approved roots
   stagingPath: text("staging_path").notNull(),
   rescan: integer("rescan", { mode: "boolean" }).notNull().default(true),

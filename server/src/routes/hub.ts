@@ -6,6 +6,7 @@ import type { TmdbAdapter } from "../adapters/tmdb.js";
 import type { RawgAdapter } from "../adapters/rawg.js";
 import { openLibraryWork, searchOpenLibrary } from "../adapters/openlibrary.js";
 import type { KavitaAdapter } from "../adapters/kavita.js";
+import type { AudiobookshelfAdapter } from "../adapters/audiobookshelf.js";
 import type { CalibreWebAdapter } from "../adapters/calibreweb.js";
 import { wantedByExternalId } from "../lib/wanted.js";
 import { getServiceDecrypted } from "../config/store.js";
@@ -64,6 +65,18 @@ function realDeps(ctx: AppContext): HubDeps {
       },
       wanted: (id) => {
         const w = wantedByExternalId(id);
+        return w ? { status: w.status as never } : undefined;
+      },
+    },
+    audiobooks: {
+      ready: () => getAdapter("prowlarr", ctx.masterKey) !== null && getAdapter("qbittorrent", ctx.masterKey) !== null,
+      // null means Audiobookshelf is not configured, so nothing can say whether we hold it.
+      libraryTitles: async (q) => {
+        const abs = getAdapter("audiobookshelf", ctx.masterKey) as AudiobookshelfAdapter | null;
+        return abs ? abs.searchTitles(q) : null;
+      },
+      wanted: (id) => {
+        const w = wantedByExternalId(id, "audiobook");
         return w ? { status: w.status as never } : undefined;
       },
     },

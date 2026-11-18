@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { basename, extname, join } from "node:path";
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { wantedItems, type Library, type WantedItem } from "../db/schema.js";
 import type { QbTorrent } from "../adapters/qbittorrent.js";
@@ -42,21 +42,24 @@ function norm(s: string): string {
 
 export function tagFor(id: string): string { return `torhq-wanted-${id}`; }
 
+export type WantedKind = "book" | "audiobook";
+
 export function createWanted(input: {
-  kind?: "book"; title: string; author?: string | null; externalId?: string | null; requestedBy: string;
+  kind?: WantedKind; title: string; author?: string | null; externalId?: string | null; requestedBy: string;
 }): { item: WantedItem; existing: boolean } {
   const db = getDb();
   const active = db.select().from(wantedItems).where(inArray(wantedItems.status, [...ACTIVE_STATUSES, "imported"])).all();
-  const dup = active.find((w) =>
+  const kind = input.kind ?? "book";
+  const dup = active.filter((w) => w.kind === kind).find((w) =>
     (input.externalId && w.externalId === input.externalId)
     || (norm(w.title) === norm(input.title) && norm(w.author ?? "") === norm(input.author ?? "")));
   if (dup) return { item: dup, existing: true };
   const id = randomUUID();
   db.insert(wantedItems).values({
-    id, kind: input.kind ?? "book", title: input.title, author: input.author ?? null,
+    id, kind, title: input.title, author: input.author ?? null,
     externalId: input.externalId ?? null, requestedBy: input.requestedBy,
   }).run();
-  logActivity({ kind: "requested", service: "books", message: `Book requested: ${input.title}${input.author ? ` by ${input.author}` : ""} (${input.requestedBy})`, data: { wantedId: id } });
+  logActivity({ kind: "requested", service: kind === "audiobook" ? "audiobooks" : "books", message: `${kind === "audiobook" ? "Audiobook" : "Book"} requested: ${input.title}${input.author ? ` by ${input.author}` : ""} (${input.requestedBy})`, data: { wantedId: id } });
   return { item: getWanted(id)!, existing: false };
 }
 
@@ -71,8 +74,8 @@ export function listWanted(requestedBy?: string): WantedItem[] {
 }
 
 /** The newest wanted item for an Open Library work, for the hub's status badge. */
-export function wantedByExternalId(externalId: string): WantedItem | undefined {
-  return getDb().select().from(wantedItems).where(eq(wantedItems.externalId, externalId))
+export function wantedByExternalId(externalId: string, kind: WantedKind = "book"): WantedItem | undefined {
+  return getDb().select().from(wantedItems).where(and(eq(wantedItems.externalId, externalId), eq(wantedItems.kind, kind)))
     .orderBy(desc(wantedItems.createdAt)).get();
 }
 
@@ -101,11 +104,34 @@ export function findBooksLibrary(libraries: Library[] = listLibraries()): Librar
   return libraries.find((l) => l.kind === "books" && l.targetService === "kavita");
 }
 
+/** The audiobooks destination: the first library aimed at Audiobookshelf. */
+export function findAudiobooksLibrary(libraries: Library[] = listLibraries()): Library | undefined {
+  return libraries.find((l) => l.kind === "audiobooks" && l.targetService === "audiobookshelf");
+}
+
+function libraryFor(w: WantedItem): Library | undefined {
+  return w.kind === "audiobook" ? findAudiobooksLibrary() : findBooksLibrary();
+}
+
 function isDone(t: QbTorrent): boolean {
   return t.progress >= 1 && !/^(moving|checking|allocating|missingFiles|error)/i.test(t.state);
 }
 
 /** What a finished download is imported as: a folder keeps its name; a lone file keeps its extension. */
+async function targetFor(w: WantedItem, sourcePath: string): Promise<{ targetName: string; destSubdir?: string }> {
+  if (w.kind === "audiobook") {
+    // Audiobookshelf's layout is Author/Title/<files>. A folder download becomes
+    // the Title folder; a lone file goes inside a Title folder.
+    const author = safeFilename(w.author || "Unknown Author");
+    const title = safeFilename(w.title);
+    const st = await fs.lstat(sourcePath);
+    return st.isDirectory()
+      ? { targetName: title, destSubdir: author }
+      : { targetName: basename(sourcePath), destSubdir: `${author}/${title}` };
+  }
+  return { targetName: await targetNameFor(w, sourcePath) };
+}
+
 async function targetNameFor(w: WantedItem, sourcePath: string): Promise<string> {
   const base = safeFilename(w.author ? `${w.title} - ${w.author}` : w.title);
   const st = await fs.lstat(sourcePath);
@@ -162,18 +188,20 @@ export async function reconcileWanted(deps: WantedDeps): Promise<{ ready: number
     if (!w.torrentHash) patch(w.id, { torrentHash: t.hash });
     if (!isDone(t)) continue;
 
-    const lib = findBooksLibrary();
+    const lib = libraryFor(w);
     if (!lib) {
-      patch(w.id, { error: "No books library is set up. Add one on the Libraries page (kind: books, target: kavita)." });
+      patch(w.id, { error: w.kind === "audiobook"
+        ? "No audiobooks library is set up. Add one on the Libraries page (kind: audiobooks, target: Audiobookshelf)."
+        : "No books library is set up. Add one on the Libraries page (kind: books, target: kavita)." });
       continue;
     }
     const sourcePath = t.contentPath || join(t.savePath, t.name);
     try {
-      const targetName = await targetNameFor(w, sourcePath);
-      const preview = await previewIntake({ libraryKey: lib.key, sourcePath, targetName }, deps.approvedRoots);
+      const { targetName, destSubdir } = await targetFor(w, sourcePath);
+      const preview = await previewIntake({ libraryKey: lib.key, sourcePath, targetName, destSubdir }, deps.approvedRoots);
       patch(w.id, {
         status: "ready", libraryKey: lib.key, sourcePath: preview.sourcePath,
-        previewJson: JSON.stringify({ ...preview, targetName }), error: null,
+        previewJson: JSON.stringify({ ...preview, targetName, destSubdir }), error: null,
       });
       logActivity({
         kind: "completed", service: "books",
@@ -189,7 +217,7 @@ export async function reconcileWanted(deps: WantedDeps): Promise<{ ready: number
   return out;
 }
 
-export interface StoredPreview extends IntakePreview { targetName: string }
+export interface StoredPreview extends IntakePreview { targetName: string; destSubdir?: string }
 
 export function previewOf(w: WantedItem): StoredPreview | null {
   if (!w.previewJson) return null;
@@ -209,15 +237,16 @@ export async function approveWanted(id: string, approvedRoots: string[], by: str
   }
   const stored = previewOf(w);
   const targetName = stored?.targetName ?? basename(w.sourcePath);
+  const destSubdir = stored?.destSubdir;
   try {
-    await previewIntake({ libraryKey: w.libraryKey, sourcePath: w.sourcePath, targetName }, approvedRoots);
+    await previewIntake({ libraryKey: w.libraryKey, sourcePath: w.sourcePath, targetName, destSubdir }, approvedRoots);
   } catch (e) {
     patch(id, { status: "grabbed", error: (e as Error).message });
     throw new WantedError(`the preview no longer holds: ${(e as Error).message}`, 422);
   }
   const job = enqueue({
     type: "manual_intake",
-    payload: { libraryKey: w.libraryKey, sourcePath: w.sourcePath, targetName },
+    payload: { libraryKey: w.libraryKey, sourcePath: w.sourcePath, targetName, destSubdir },
     idempotencyKey: `wanted:${id}`,
   });
   patch(id, { status: "importing", jobId: job.id, error: null });

@@ -53,7 +53,7 @@ interface ServiceSafe { kind: string; label: string }
 interface HealthResponse { health: Record<string, HealthResult>; services: ServiceSafe[] }
 const KIND_LABEL: Record<string, string> = {
   qbittorrent: "qBittorrent", radarr: "Radarr", sonarr: "Sonarr", lidarr: "Lidarr", prowlarr: "Prowlarr",
-  slskd: "slskd", jellyfin: "Jellyfin", navidrome: "Navidrome", kavita: "Kavita",
+  slskd: "slskd", jellyfin: "Jellyfin", navidrome: "Navidrome", kavita: "Kavita", audiobookshelf: "Audiobookshelf",
   torrentsearch: "Torrent search", websearch: "Web search",
 };
 
