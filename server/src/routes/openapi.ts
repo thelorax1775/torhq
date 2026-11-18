@@ -784,6 +784,25 @@ export const openApiDoc = {
         },
       },
     },
+    "/api/acquire/auto-search": {
+      post: {
+        summary: "Ask the *arr to run its own automatic search for a prepared title (admin)",
+        description:
+          "The one-click path after /api/acquire/prepare: the *arr itself searches and grabs a release. " +
+          "TorHQ never picks or moves anything. Admin only.",
+        security: [{ cookieAuth: [], csrfToken: [] }],
+        parameters: [csrfHeader],
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["service", "id"], properties: {
+          service: { type: "string", enum: ["radarr", "sonarr", "lidarr"] }, id: { type: "integer" },
+        } } } } },
+        responses: {
+          "200": { description: "Search queued in the *arr", content: { "application/json": { schema: { type: "object" } } } },
+          "403": errorResponse("admin only"),
+          "409": errorResponse("that *arr is not configured"),
+          "502": errorResponse("the *arr refused"),
+        },
+      },
+    },
     "/api/acquire/prepare": {
       post: {
         summary: "Ensure the chosen title exists in its *arr, and return its library id",

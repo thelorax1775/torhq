@@ -958,6 +958,10 @@ pre {
 .poster-empty { display: flex; align-items: center; justify-content: center; color: var(--text-dim); }
 .result-card:hover .poster { border-color: var(--accent); }
 .poster-status { position: absolute; top: var(--s2); left: var(--s2); }
+.poster-status .badge {
+  background: var(--surface-1); border: 1px solid var(--border-strong);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); font-weight: 700;
+}
 .result-title { font-weight: 600; font-size: var(--fs-md); line-height: 1.3; }
 .sheet { width: min(640px, 100%); }
 .sheet-body { display: flex; gap: var(--s4); align-items: flex-start; }
@@ -974,6 +978,7 @@ pre {
 @media (max-width: 620px) {
   .result-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
   .searchbar-lg .input { font-size: var(--fs-lg); }
+  .toast { left: 12px; right: 12px; bottom: 12px; transform: none; max-width: none; justify-content: space-between; }
   .scrim-modal:has(.sheet) { padding: 0; align-items: stretch; }
   .modal.sheet { width: 100%; max-height: none; height: 100%; border-radius: 0; display: flex; flex-direction: column; }
   .modal.sheet .modal-body { flex: 1; overflow-y: auto; }
