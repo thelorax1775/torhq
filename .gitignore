@@ -28,3 +28,4 @@ libraries/
 
 .swarm/
 ruvector.db
+.worktrees/
