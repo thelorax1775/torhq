@@ -12,7 +12,7 @@ import { useMutation } from "../lib/useMutation.js";
 import { usePolled } from "../lib/usePolled.js";
 import { ago, plural } from "../lib/format.js";
 import {
-  Alert, Async, Badge, Button, Card, EmptyState, PageHeader,
+  Alert, Async, Badge, Button, Card, EmptyState, LinkButton, PageHeader,
   RefreshButton, StaleNotice, Stat, TableWrap, type Tone,
 } from "../components/ui.js";
 
@@ -215,6 +215,9 @@ export function Jobs() {
                   <div key={a.id} className="list-row">
                     <Badge tone={KIND_TONE[a.kind] ?? "neutral"}>{a.kind}</Badge>
                     <div className="grow small break">{a.message}</div>
+                    {a.service === "books" && /ready for approval/i.test(a.message) && (
+                      <LinkButton to="/books" size="sm" variant="primary">Approve import</LinkButton>
+                    )}
                     {a.service && <span className="small dim">{a.service}</span>}
                     <span className="small dim nowrap">{ago(a.createdAt)}</span>
                   </div>

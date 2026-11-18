@@ -85,6 +85,8 @@ export function markGrabbed(id: string, g: { releaseTitle: string; releaseFormat
   patch(id, {
     status: "grabbed", releaseTitle: g.releaseTitle.slice(0, 512), releaseFormat: g.releaseFormat,
     qbCategory: g.category, torrentTag: tagFor(id), error: null,
+    // A re-grab starts clean: never keep following the replaced torrent or its preview.
+    torrentHash: null, sourcePath: null, previewJson: null, libraryKey: null,
   });
   logActivity({ kind: "queued", service: "qbittorrent", message: `Grabbed "${g.releaseTitle.slice(0, 120)}" into ${g.category}`, data: { wantedId: id } });
 }
@@ -146,7 +148,9 @@ export async function reconcileWanted(deps: WantedDeps): Promise<{ ready: number
 
     const all = await loadTorrents();
     if (!all) continue; // qBittorrent unreachable: try again next pass
-    const t = all.find((x) => (w.torrentHash && x.hash === w.torrentHash) || (w.torrentTag && x.tags.includes(w.torrentTag)));
+    const byHash = w.torrentHash ? all.find((x) => x.hash === w.torrentHash) : undefined;
+    // Without a pinned hash, take the newest torrent carrying the tag (an older one may be a replaced grab).
+    const t = byHash ?? (w.torrentTag ? all.filter((x) => x.tags.includes(w.torrentTag!)).sort((a, b) => (b.addedOn ?? 0) - (a.addedOn ?? 0))[0] : undefined);
     if (!t) {
       // Added moments ago it may not be listed yet; later, it was removed from qBittorrent.
       if (Date.now() - w.updatedAt > 5 * 60_000) {

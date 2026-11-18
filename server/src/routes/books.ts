@@ -176,7 +176,6 @@ export function bookRoutes(app: FastifyInstance, ctx: AppContext): void {
     const { id } = IdParam.parse(req.params);
     if (!getWanted(id)) return reply.code(404).send({ error: "not found" });
     declineWanted(id, req.session!.username);
-    logActivity({ kind: "info", service: "books", message: `Declined book ${id}` });
     return { ok: true };
   });
 }

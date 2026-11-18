@@ -237,6 +237,30 @@ describe("books flow: request -> grab -> download -> preview -> approve", () => 
     expect(getWanted(id)).toMatchObject({ status: "grabbed", releaseFormat: "epub", qbCategory: "torhq-books" });
   });
 
+  it("a re-grab drops the old torrent: the preview is built from the new release, not the first", async () => {
+    const id = await request();
+    await grab(id);
+    const mk = (hash: string, name: string, addedOn: number) => {
+      const dir = join(root, "downloads/torhq-books", name);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, `${name}.epub`), "bytes");
+      return { hash: hash.repeat(40), name, category: "torhq-books", state: "stalledUP", progress: 1,
+        savePath: join(root, "downloads/torhq-books"), contentPath: dir, tags: [tagFor(id)], addedOn };
+    };
+    const a = mk("a", "Dune-A", 1);
+    torrents = [{ ...a, state: "downloading", progress: 0.2 }];
+    await reconcile(); // pins A's hash
+    expect(getWanted(id)!.torrentHash).toBe("a".repeat(40));
+
+    await grab(id); // re-grab B while A is still listed
+    expect(getWanted(id)).toMatchObject({ status: "grabbed", torrentHash: null, previewJson: null });
+    const b = mk("b", "Dune-B", 2);
+    torrents = [a, b];
+    expect((await reconcile()).ready).toBe(1);
+    expect(getWanted(id)!.torrentHash).toBe("b".repeat(40));
+    expect(getWanted(id)!.sourcePath).toBe(b.contentPath);
+  });
+
   it("rejects a non-magnet url smuggled into the grab", async () => {
     const id = await request();
     const r = await post(`/api/books/wanted/${id}/grab`, adminCookie, adminCsrf, { guid: "x", indexerId: 3, magnet: "http://evil/x", title: "t" });

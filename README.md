@@ -161,7 +161,9 @@ previewed, approved import.
 
 No \*arr manages books, so TorHQ's own intake does (see
 [the intake boundary](#the-intake-boundary-torhq-vs-the-arr)). The flow, from the
-**Books** page (admins add; members **Request**):
+**Books** page, or straight from the search hub (a book's detail sheet sends
+*Request*; an admin lands on the release picker; a downloaded book shows
+*Approve import* in the sheet and on its Jobs & activity entry):
 
 1. **Search** a title or author (Open Library). Each result says whether you
    already hold it: Kavita's and Calibre-Web's own searches are asked, so a book
@@ -180,7 +182,7 @@ No \*arr manages books, so TorHQ's own intake does (see
    preview** against the books library. **Nothing is moved yet.**
 6. **Approve.** One click on *Approve import* queues the normal intake job
    (previewed, confined to `TORHQ_APPROVED_ROOTS`, retried, logged under Jobs &
-   activity). The item then shows *Available* once Kavita has it.
+   activity). Grabbing a different release replaces the earlier one cleanly (the old torrent and preview are dropped). The item then shows *Available* once Kavita has it.
 
 **Setup**
 
