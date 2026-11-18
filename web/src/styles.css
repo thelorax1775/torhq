@@ -1025,5 +1025,6 @@ pre {
 @media (max-width: 620px) {
   .activity-row { padding: var(--s3); gap: var(--s3); }
   .activity-art { width: 48px; height: 72px; }
-  .step-label { font-size: 10px; overflow-wrap: anywhere; }
+  .step-label { font-size: 9px; letter-spacing: -0.02em; white-space: nowrap; }
+  .step { overflow: visible; }
 }
