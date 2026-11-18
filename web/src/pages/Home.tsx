@@ -19,11 +19,11 @@ import { usePolled } from "../lib/usePolled.js";
 import { Alert, Badge, Button, EmptyState, Modal, SelectField, Skeleton, cx, type Tone } from "../components/ui.js";
 import { Icon, type IconName } from "../components/Icon.js";
 
-type Kind = "movie" | "tv" | "music" | "game" | "book" | "audiobook";
-type Status = "available" | "requested" | "downloading" | "missing" | "none" | "unknown";
+export type Kind = "movie" | "tv" | "music" | "game" | "book" | "audiobook";
+export type Status = "available" | "requested" | "downloading" | "missing" | "none" | "unknown";
 type Owner = "radarr" | "sonarr" | "lidarr" | "intake" | "prowlarr";
 
-interface HubResult {
+export interface HubResult {
   kind: Kind; id: string; title: string; year?: number; subtitle?: string;
   poster?: string; overview?: string; status: Status; owner: Owner; actionable: boolean;
 }
@@ -105,7 +105,30 @@ function StatusBadge({ status }: { status: Status }) {
   return b ? <Badge tone={b.tone}>{b.label}</Badge> : null;
 }
 
-interface Toast { id: number; message: string }
+export interface Toast { id: number; message: string }
+
+/** The confirmation after an add or request, with the way to Activity. Auto-dismisses. */
+export function useAddedToast() {
+  const [toast, setToast] = useState<Toast | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const h = setTimeout(() => setToast(null), 9000);
+    return () => clearTimeout(h);
+  }, [toast]);
+  return [toast, setToast] as const;
+}
+
+export function AddedToast({ toast, onDismiss }: { toast: Toast | null; onDismiss: () => void }) {
+  if (!toast) return null;
+  return (
+    <div className="toast" role="status" key={toast.id}>
+      <Icon name="check" size={15} />
+      <span>{toast.message}</span>
+      <Link to="/activity">Watch it in Activity</Link>
+      <Button variant="ghost" size="sm" icon="close" aria-label="Dismiss" onClick={onDismiss} />
+    </div>
+  );
+}
 
 export function Home({ role }: { role: "admin" | "member" | null }) {
   const isAdmin = role === "admin";
@@ -156,12 +179,7 @@ export function Home({ role }: { role: "admin" | "member" | null }) {
   };
 
   const [open, setOpen] = useState<HubResult | null>(null);
-  const [toast, setToast] = useState<Toast | null>(null);
-  useEffect(() => {
-    if (!toast) return;
-    const h = setTimeout(() => setToast(null), 9000);
-    return () => clearTimeout(h);
-  }, [toast]);
+  const [toast, setToast] = useAddedToast();
 
   const results = (search.data?.results ?? []).map(withOverride);
   const degraded = (search.data?.sources ?? []).filter((s) => !s.available);
@@ -254,19 +272,12 @@ export function Home({ role }: { role: "admin" | "member" | null }) {
         />
       )}
 
-      {toast && (
-        <div className="toast" role="status" key={toast.id}>
-          <Icon name="check" size={15} />
-          <span>{toast.message}</span>
-          <Link to="/activity">Watch it in Activity</Link>
-          <Button variant="ghost" size="sm" icon="close" aria-label="Dismiss" onClick={() => setToast(null)} />
-        </div>
-      )}
+      <AddedToast toast={toast} onDismiss={() => setToast(null)} />
     </>
   );
 }
 
-function DetailSheet({ result, isAdmin, onClose, onAdded }: {
+export function DetailSheet({ result, isAdmin, onClose, onAdded }: {
   result: HubResult;
   isAdmin: boolean;
   onClose: () => void;

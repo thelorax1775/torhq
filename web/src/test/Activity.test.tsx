@@ -118,7 +118,7 @@ describe("nav", () => {
   }
   it("members get Activity and none of Downloads, Queue, Jobs", () => {
     renderNav("member");
-    expect(screen.getByRole("link", { name: "Activity" })).toHaveAttribute("href", "/activity");
+    for (const a of screen.getAllByRole("link", { name: "Activity" })) expect(a).toHaveAttribute("href", "/activity");
     for (const n of ["Downloads", "Queue", "Jobs & log"]) expect(screen.queryByRole("link", { name: n })).toBeNull();
     expect(screen.queryByText("Advanced")).toBeNull();
   });
@@ -126,7 +126,7 @@ describe("nav", () => {
     renderNav("admin");
     expect(screen.getByText("Advanced")).toBeInTheDocument();
     const adv = NAV.find((g) => g.group === "Advanced")!;
-    expect(adv.items.map((i) => i.to)).toEqual(["/downloads", "/queue", "/jobs"]);
+    expect(adv.items.map((i) => i.to)).toEqual(["/get", "/search", "/downloads", "/queue", "/jobs", "/requests"]);
     for (const i of adv.items) expect(screen.getByRole("link", { name: i.label })).toHaveAttribute("href", i.to);
   });
 });
