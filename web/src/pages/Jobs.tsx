@@ -215,8 +215,8 @@ export function Jobs() {
                   <div key={a.id} className="list-row">
                     <Badge tone={KIND_TONE[a.kind] ?? "neutral"}>{a.kind}</Badge>
                     <div className="grow small break">{a.message}</div>
-                    {a.service === "books" && /ready for approval/i.test(a.message) && (
-                      <LinkButton to="/books" size="sm" variant="primary">Approve import</LinkButton>
+                    {(a.service === "books" || a.service === "audiobooks") && /ready for approval/i.test(a.message) && (
+                      <LinkButton to={a.service === "audiobooks" ? "/audiobooks" : "/books"} size="sm" variant="primary">Approve import</LinkButton>
                     )}
                     {a.service && <span className="small dim">{a.service}</span>}
                     <span className="small dim nowrap">{ago(a.createdAt)}</span>

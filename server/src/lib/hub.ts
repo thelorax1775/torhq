@@ -86,6 +86,12 @@ export interface HubDeps {
     libraryTitles(q: string): Promise<string[] | null>;
     wanted(externalId: string): { status: WantedStatus } | undefined;
   };
+  /** Audiobooks: the same shape as `books`, answered by Audiobookshelf's own search. */
+  audiobooks?: {
+    ready(): boolean;
+    libraryTitles(q: string): Promise<string[] | null>;
+    wanted(externalId: string): { status: WantedStatus } | undefined;
+  };
   /** Saved placement defaults for an *arr (from its service config). */
   savedDefaults(service: "radarr" | "sonarr" | "lidarr"): { rootFolderPath?: string; qualityProfileId?: number; metadataProfileId?: number };
   /** Per-source budget; a source that exceeds it degrades instead of stalling the request. */
@@ -198,20 +204,21 @@ function fromBook(
   kind: "book" | "audiobook", w: OpenLibraryWork,
   books?: { ready: boolean; held: string[] | null; wanted?: { status: WantedStatus } },
 ): HubResult {
-  // Audiobooks have no grab path yet, and a book without a configured grab path would be a dead button.
-  const status: HubStatus = kind === "book" && books ? bookStatus(w, books.held, books.wanted) : "unknown";
+  // Without the owning library's answer nothing can say whether we hold it, and without a grab path the button would be dead.
+  const status: HubStatus = books ? bookStatus(w, books.held, books.wanted) : "unknown";
   return {
     kind, id: w.id, title: w.title, year: w.year, subtitle: w.author, poster: w.poster, overview: w.overview,
     status, owner: "intake",
-    actionable: kind === "book" && !!books && actionableFor(status, books.ready),
+    actionable: !!books && actionableFor(status, books.ready),
   };
 }
 
 /** What the libraries hold for a book search; a library that is down is "unknown", never an error. */
-async function bookContext(deps: HubDeps, q: string): Promise<{ ready: boolean; held: string[] | null } | undefined> {
-  if (!deps.books) return undefined;
-  const held = await deps.books.libraryTitles(q).catch(() => null);
-  return { ready: deps.books.ready(), held };
+async function bookContext(deps: HubDeps, q: string, kind: "book" | "audiobook" = "book"): Promise<{ ready: boolean; held: string[] | null } | undefined> {
+  const src = kind === "audiobook" ? deps.audiobooks : deps.books;
+  if (!src) return undefined;
+  const held = await src.libraryTitles(q).catch(() => null);
+  return { ready: src.ready(), held };
 }
 
 async function searchKind(deps: HubDeps, kind: HubKind, q: string): Promise<HubResult[]> {
@@ -243,8 +250,10 @@ async function searchKind(deps: HubDeps, kind: HubKind, q: string): Promise<HubR
       const [works, ctx] = await Promise.all([deps.openLibrary.search(q), bookContext(deps, q)]);
       return works.map((w) => fromBook(kind, w, ctx && { ...ctx, wanted: deps.books!.wanted(w.id) }));
     }
-    case "audiobook":
-      return (await deps.openLibrary.search(q)).map((w) => fromBook(kind, w));
+    case "audiobook": {
+      const [works, ctx] = await Promise.all([deps.openLibrary.search(q), bookContext(deps, q, "audiobook")]);
+      return works.map((w) => fromBook(kind, w, ctx && { ...ctx, wanted: deps.audiobooks!.wanted(w.id) }));
+    }
   }
 }
 
@@ -338,9 +347,10 @@ export async function hubItem(deps: HubDeps, kind: HubKind, id: string, isAdmin:
   const w = await run(deps.openLibrary.work(id));
   if (!w) throw new HubItemError("not found", 404);
   // The work record carries no author; the search by title does, and is what the library check needs.
-  const ctx = kind === "book" ? await run(bookContext(deps, w.title).then((c) => c ?? null)) : null;
+  const src = kind === "audiobook" ? deps.audiobooks : deps.books;
+  const ctx = await run(bookContext(deps, w.title, kind as "book" | "audiobook").then((c) => c ?? null));
   return {
-    ...fromBook(kind, w, ctx ? { ...ctx, wanted: deps.books!.wanted(id) } : undefined), genres: [],
+    ...fromBook(kind as "book" | "audiobook", w, ctx && src ? { ...ctx, wanted: src.wanted(id) } : undefined), genres: [],
     addOptions: { service: "intake", monitored: false, searchNow: false, basis: "none" },
   };
 }

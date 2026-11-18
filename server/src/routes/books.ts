@@ -8,7 +8,10 @@ import {
   BOOKS_QB_CATEGORY, BOOK_CATEGORIES, bestBookRelease, bookQuery, detectFormat, rankBookReleases,
 } from "../lib/books.js";
 import {
-  WantedError, approveWanted, createWanted, declineWanted, findBooksLibrary, getWanted, listWanted,
+  AUDIOBOOKS_QB_CATEGORY, AUDIOBOOK_CATEGORIES, bestAudiobookRelease, detectAudioFormat, rankAudiobookReleases,
+} from "../lib/audiobooks.js";
+import {
+  WantedError, approveWanted, createWanted, declineWanted, findAudiobooksLibrary, findBooksLibrary, getWanted, listWanted,
   markGrabbed, previewOf, reconcileWanted, tagFor, type WantedDeps,
 } from "../lib/wanted.js";
 import type { WantedItem } from "../db/schema.js";
@@ -63,7 +66,38 @@ function publicView(w: WantedItem, isAdmin: boolean) {
   };
 }
 
+/** What differs between the ebook flow and the audiobook flow; everything else is shared. */
+interface Flow {
+  kind: "book" | "audiobook";
+  base: string;
+  noun: string;
+  category: string;
+  categories: readonly number[];
+  query(title: string, author?: string | null): string;
+  rank(raw: ProwlarrRelease[], want: { title: string }): Array<{ guid: string }>;
+  best(ranked: any[]): { guid: string } | null;
+  format(title: string): string | null;
+  library(): { key: string; label: string; importMode: string } | undefined;
+  libraryHint: string;
+}
+
+const BOOK_FLOW: Flow = {
+  kind: "book", base: "/api/books", noun: "book", category: BOOKS_QB_CATEGORY, categories: BOOK_CATEGORIES,
+  query: bookQuery, rank: rankBookReleases, best: bestBookRelease, format: detectFormat, library: findBooksLibrary,
+  libraryHint: "No books library: add one on the Libraries page (kind books, target Kavita).",
+};
+const AUDIOBOOK_FLOW: Flow = {
+  kind: "audiobook", base: "/api/audiobooks", noun: "audiobook", category: AUDIOBOOKS_QB_CATEGORY, categories: AUDIOBOOK_CATEGORIES,
+  query: bookQuery, rank: rankAudiobookReleases, best: bestAudiobookRelease, format: detectAudioFormat, library: findAudiobooksLibrary,
+  libraryHint: "No audiobooks library: add one on the Libraries page (kind audiobooks, target Audiobookshelf).",
+};
+
 export function bookRoutes(app: FastifyInstance, ctx: AppContext): void {
+  flowRoutes(app, ctx, BOOK_FLOW);
+  flowRoutes(app, ctx, AUDIOBOOK_FLOW);
+}
+
+function flowRoutes(app: FastifyInstance, ctx: AppContext, flow: Flow): void {
   const read = { preHandler: app.requireAuth };
   const member = { preHandler: [app.requireAuth, app.requireCsrf] };
   const adminRead = { preHandler: [app.requireAuth, app.requireAdmin] };
@@ -71,6 +105,8 @@ export function bookRoutes(app: FastifyInstance, ctx: AppContext): void {
 
   const prowlarr = () => getAdapter("prowlarr", ctx.masterKey) as ProwlarrAdapter | null;
   const qbittorrent = () => getAdapter("qbittorrent", ctx.masterKey) as QbittorrentAdapter | null;
+  /** An item of this flow only: a book id on an audiobook route is a 404, never a cross-kind action. */
+  const mine = (id: string) => { const w = getWanted(id); return w && w.kind === flow.kind ? w : undefined; };
   const deps = (): WantedDeps => depsOverride ?? { qb: qbittorrent, approvedRoots: ctx.env.approvedRoots };
 
   const fail = (reply: { code(n: number): { send(b: unknown): unknown } }, e: unknown) => {
@@ -79,64 +115,64 @@ export function bookRoutes(app: FastifyInstance, ctx: AppContext): void {
   };
 
   // What the books flow needs, and which part is missing. Admin-only: it names services.
-  app.get("/api/books/status", adminRead, async () => {
+  app.get(`${flow.base}/status`, adminRead, async () => {
     const p = prowlarr();
     const qb = qbittorrent();
-    const lib = findBooksLibrary();
+    const lib = flow.library();
     let categoryExists: boolean | null = null;
     if (qb) {
-      try { categoryExists = BOOKS_QB_CATEGORY in (await qb.categories()); } catch { categoryExists = null; }
+      try { categoryExists = flow.category in (await qb.categories()); } catch { categoryExists = null; }
     }
     const problems: string[] = [];
     if (!p) problems.push("Prowlarr is not configured.");
     if (!qb) problems.push("qBittorrent is not configured.");
-    if (categoryExists === false) problems.push(`qBittorrent has no \`${BOOKS_QB_CATEGORY}\` category; create it with a save path inside an approved root.`);
-    if (!lib) problems.push("No books library: add one on the Libraries page (kind books, target Kavita).");
+    if (categoryExists === false) problems.push(`qBittorrent has no \`${flow.category}\` category; create it with a save path inside an approved root.`);
+    if (!lib) problems.push(flow.libraryHint);
     return {
-      prowlarr: !!p, qbittorrent: !!qb, category: BOOKS_QB_CATEGORY, categoryExists,
+      prowlarr: !!p, qbittorrent: !!qb, category: flow.category, categoryExists,
       library: lib ? { key: lib.key, label: lib.label, importMode: lib.importMode } : null,
       ready: problems.length === 0, problems,
     };
   });
 
   // A member (or the admin) asks for a book. Duplicates return the existing item.
-  app.post("/api/books/request", member, async (req) => {
+  app.post(`${flow.base}/request`, member, async (req) => {
     const body = RequestBody.parse(req.body);
-    const { item, existing } = createWanted({ ...body, requestedBy: req.session!.username });
+    const { item, existing } = createWanted({ ...body, kind: flow.kind, requestedBy: req.session!.username });
     return { ok: true, existing, item: publicView(item, req.session!.role === "admin") };
   });
 
   // The admin sees everything; a member sees only their own requests, without paths.
-  app.get("/api/books/wanted", read, async (req) => {
+  app.get(`${flow.base}/wanted`, read, async (req) => {
     const isAdmin = req.session!.role === "admin";
     // Finished downloads become previews on read too, so the page is never behind the watcher.
     if (isAdmin) await reconcileWanted(deps()).catch(() => undefined);
-    const rows = listWanted(isAdmin ? undefined : req.session!.username);
+    const rows = listWanted(isAdmin ? undefined : req.session!.username).filter((w) => w.kind === flow.kind);
     return { items: rows.map((w) => publicView(w, isAdmin)) };
   });
 
   // Search Prowlarr's book categories with title + author and rank the results.
-  app.post("/api/books/wanted/:id/search", admin, async (req, reply) => {
+  app.post(`${flow.base}/wanted/:id/search`, admin, async (req, reply) => {
     const { id } = IdParam.parse(req.params);
-    const w = getWanted(id);
+    const w = mine(id);
     if (!w) return reply.code(404).send({ error: "not found" });
     const p = prowlarr();
     if (!p) return reply.code(409).send({ error: "Prowlarr is not configured" });
     try {
-      const raw: ProwlarrRelease[] = await p.search(bookQuery(w.title, w.author), { categories: [...BOOK_CATEGORIES] });
-      const releases = rankBookReleases(raw, { title: w.title });
-      const best = bestBookRelease(releases);
-      return { query: bookQuery(w.title, w.author), categories: BOOK_CATEGORIES, releases, bestGuid: best?.guid ?? null };
+      const raw: ProwlarrRelease[] = await p.search(flow.query(w.title, w.author), { categories: [...flow.categories] });
+      const releases = flow.rank(raw, { title: w.title });
+      const best = flow.best(releases);
+      return { query: flow.query(w.title, w.author), categories: flow.categories, releases, bestGuid: best?.guid ?? null };
     } catch (e) {
       return reply.code(502).send({ error: (e as Error).message });
     }
   });
 
   // Grab the chosen release into `torhq-books`, tagged so the finished download can be found again.
-  app.post("/api/books/wanted/:id/grab", admin, async (req, reply) => {
+  app.post(`${flow.base}/wanted/:id/grab`, admin, async (req, reply) => {
     const { id } = IdParam.parse(req.params);
     const body = GrabBody.parse(req.body);
-    const w = getWanted(id);
+    const w = mine(id);
     if (!w) return reply.code(404).send({ error: "not found" });
     if (w.status !== "requested" && w.status !== "failed" && w.status !== "grabbed") {
       return reply.code(409).send({ error: `this item is ${w.status}; it cannot be grabbed again` });
@@ -155,26 +191,27 @@ export function bookRoutes(app: FastifyInstance, ctx: AppContext): void {
       return reply.code(400).send({ error: (e as Error).message });
     }
     try {
-      await qb.addTorrent({ url, category: BOOKS_QB_CATEGORY, tags: [tagFor(id)] });
+      await qb.addTorrent({ url, category: flow.category, tags: [tagFor(id)] });
     } catch (e) {
       return reply.code(502).send({ error: (e as Error).message });
     }
-    markGrabbed(id, { releaseTitle: body.title, releaseFormat: detectFormat(body.title), category: BOOKS_QB_CATEGORY });
-    return { ok: true, category: BOOKS_QB_CATEGORY, item: publicView(getWanted(id)!, true) };
+    markGrabbed(id, { releaseTitle: body.title, releaseFormat: flow.format(body.title), category: flow.category });
+    return { ok: true, category: flow.category, item: publicView(getWanted(id)!, true) };
   });
 
   // The one-click approval: queues the previewed intake job. The only step that moves files.
-  app.post("/api/books/wanted/:id/approve", admin, async (req, reply) => {
+  app.post(`${flow.base}/wanted/:id/approve`, admin, async (req, reply) => {
     const { id } = IdParam.parse(req.params);
+    if (!mine(id)) return reply.code(404).send({ error: "not found" });
     try {
       const { jobId } = await approveWanted(id, ctx.env.approvedRoots, req.session!.username);
       return { ok: true, jobId, item: publicView(getWanted(id)!, true) };
     } catch (e) { return fail(reply, e); }
   });
 
-  app.post("/api/books/wanted/:id/decline", admin, async (req, reply) => {
+  app.post(`${flow.base}/wanted/:id/decline`, admin, async (req, reply) => {
     const { id } = IdParam.parse(req.params);
-    if (!getWanted(id)) return reply.code(404).send({ error: "not found" });
+    if (!mine(id)) return reply.code(404).send({ error: "not found" });
     declineWanted(id, req.session!.username);
     return { ok: true };
   });

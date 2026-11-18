@@ -54,34 +54,48 @@ const HUB_TONE: Record<string, Tone> = {
   available: "ok", requested: "info", downloading: "info", missing: "warn", none: "neutral", unknown: "neutral",
 };
 
-export function Books({ role }: { role: Role }) {
+const FLOWS = {
+  book: {
+    base: "/api/books", noun: "book", Noun: "Books", cats: "book", ranking: "epub, then azw3, mobi, pdf",
+    findHint: "Title or author",
+  },
+  audiobook: {
+    base: "/api/audiobooks", noun: "audiobook", Noun: "Audiobooks", cats: "audiobook", ranking: "m4b, then m4a, mp3, flac, ogg",
+    findHint: "Title or author",
+  },
+} as const;
+type Flow = (typeof FLOWS)[keyof typeof FLOWS];
+
+export function Books({ role, kind = "book" }: { role: Role; kind?: "book" | "audiobook" }) {
+  const flow: Flow = FLOWS[kind];
+  const base = flow.base;
   const isAdmin = role === "admin";
   const [term, setTerm] = useState("");
   const [committed, setCommitted] = useState<string | null>(null);
   const [picking, setPicking] = useState<Wanted | null>(null);
 
-  const searchQ = usePolled<HubSearch>(committed ? `/api/hub/search?q=${encodeURIComponent(committed)}&kinds=book` : null);
-  const wantedQ = usePolled<{ items: Wanted[] }>("/api/books/wanted", 10000);
-  const statusQ = usePolled<BooksStatus>(isAdmin ? "/api/books/status" : null);
+  const searchQ = usePolled<HubSearch>(committed ? `/api/hub/search?q=${encodeURIComponent(committed)}&kinds=${kind}` : null);
+  const wantedQ = usePolled<{ items: Wanted[] }>(`${base}/wanted`, 10000);
+  const statusQ = usePolled<BooksStatus>(isAdmin ? `${base}/status` : null);
 
   const request = useMutation(
-    (r: HubResult) => apiSend<{ ok: true; existing: boolean }>("/api/books/request", "POST", {
+    (r: HubResult) => apiSend<{ ok: true; existing: boolean }>(`${base}/request`, "POST", {
       title: r.title, author: r.subtitle?.split(",")[0]?.trim() || undefined, externalId: /^OL\d+W$/.test(r.id) ? r.id : undefined,
     }),
-    { invalidates: ["/api/books/wanted", "/api/hub/search"] },
+    { invalidates: [`${base}/wanted`, "/api/hub/search"] },
   );
   const approve = useMutation(
-    (id: string) => apiSend(`/api/books/wanted/${id}/approve`, "POST"),
-    { invalidates: ["/api/books/wanted"] },
+    (id: string) => apiSend(`${base}/wanted/${id}/approve`, "POST"),
+    { invalidates: [`${base}/wanted`] },
   );
   const decline = useMutation(
-    (id: string) => apiSend(`/api/books/wanted/${id}/decline`, "POST"),
-    { invalidates: ["/api/books/wanted"] },
+    (id: string) => apiSend(`${base}/wanted/${id}/decline`, "POST"),
+    { invalidates: [`${base}/wanted`] },
   );
 
   const items = wantedQ.data?.items ?? [];
-  const results = (searchQ.data?.results ?? []).filter((r) => r.kind === "book");
-  const bookSource = searchQ.data?.sources.find((s) => s.kind === "book");
+  const results = (searchQ.data?.results ?? []).filter((r) => r.kind === kind);
+  const bookSource = searchQ.data?.sources.find((s) => s.kind === kind);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -92,36 +106,36 @@ export function Books({ role }: { role: Role }) {
   return (
     <>
       <PageHeader
-        title="Books"
+        title={flow.Noun}
         subtitle={isAdmin
-          ? "Find a book, pick a release, and approve the import. Nothing is filed until you approve the preview."
-          : "Search for a book and request it. An admin will find a copy and add it to the library."}
+          ? `Find ${a(flow.noun)}, pick a release, and approve the import. Nothing is filed until you approve the preview.`
+          : `Search for ${a(flow.noun)} and request it. An admin will find a copy and add it to the library.`}
       />
 
       {isAdmin && statusQ.data && !statusQ.data.ready && (
-        <Alert tone="warn" title="Books are not fully set up">
+        <Alert tone="warn" title={`${flow.Noun} are not fully set up`}>
           <ul className="stack-sm">
             {statusQ.data.problems.map((p) => <li key={p}>{p}</li>)}
           </ul>
         </Alert>
       )}
 
-      <Card title="Find a book" icon="search">
+      <Card title={`Find ${a(flow.noun)}`} icon="search">
         <form className="row" onSubmit={submit} role="search">
           <input
-            className="input grow" aria-label="Search books" placeholder="Title or author"
+            className="input grow" aria-label={`Search ${flow.noun}s`} placeholder="Title or author"
             value={term} onChange={(e) => setTerm(e.target.value)}
           />
           <Button variant="primary" icon="search" type="submit" disabled={!term.trim()}>Search</Button>
         </form>
         {request.error && <Alert tone="err" title="Request failed">{request.error}</Alert>}
         {committed && (
-          <Async q={searchQ} what="books">
+          <Async q={searchQ} what={`${flow.noun}s`}>
             {() => (
               bookSource && !bookSource.available ? (
-                <Alert tone="warn" title="Book search is unavailable">{bookSource.detail ?? "The metadata source did not answer."}</Alert>
+                <Alert tone="warn" title={`${flow.Noun} search is unavailable`}>{bookSource.detail ?? "The metadata source did not answer."}</Alert>
               ) : results.length === 0 ? (
-                <EmptyState icon="book" title="No books found" message="Try the author's name or fewer words." />
+                <EmptyState icon="book" title={`No ${flow.noun}s found`} message="Try the author's name or fewer words." />
               ) : (
                 <div className="list">
                   {results.map((r) => (
@@ -154,7 +168,7 @@ export function Books({ role }: { role: Role }) {
         <Async q={wantedQ} what="requests">
           {() => (
             items.length === 0 ? (
-              <EmptyState icon="book" title="Nothing requested yet" message="Search above and add a book." />
+              <EmptyState icon="book" title="Nothing requested yet" message={`Search above and add ${a(flow.noun)}.`} />
             ) : (
               <div className="list">
                 {items.map((w) => (
@@ -198,10 +212,12 @@ export function Books({ role }: { role: Role }) {
         )}
       </Card>
 
-      {picking && <ReleasePicker item={picking} onClose={() => setPicking(null)} />}
+      {picking && <ReleasePicker item={picking} flow={flow} onClose={() => setPicking(null)} />}
     </>
   );
 }
+
+function a(noun: string): string { return /^[aeiou]/i.test(noun) ? `an ${noun}` : `a ${noun}`; }
 
 function PreviewBox({ preview }: { preview: Preview }) {
   return (
@@ -214,14 +230,14 @@ function PreviewBox({ preview }: { preview: Preview }) {
   );
 }
 
-function ReleasePicker({ item, onClose }: { item: Wanted; onClose: () => void }) {
+function ReleasePicker({ item, flow, onClose }: { item: Wanted; flow: Flow; onClose: () => void }) {
   const [chosen, setChosen] = useState<string | null>(null);
-  const search = useMutation(() => apiSend<SearchResponse>(`/api/books/wanted/${item.id}/search`, "POST"));
+  const search = useMutation(() => apiSend<SearchResponse>(`${flow.base}/wanted/${item.id}/search`, "POST"));
   const grab = useMutation(
-    (r: Release) => apiSend(`/api/books/wanted/${item.id}/grab`, "POST", {
+    (r: Release) => apiSend(`${flow.base}/wanted/${item.id}/grab`, "POST", {
       guid: r.guid, indexerId: r.indexerId, title: r.title, magnet: r.magnetUrl, downloadUrl: r.downloadUrl,
     }),
-    { invalidates: ["/api/books/wanted"] },
+    { invalidates: [`${flow.base}/wanted`] },
   );
   // Search once when the dialog opens; the best match comes back pre-selected.
   useEffect(() => {
@@ -253,17 +269,17 @@ function ReleasePicker({ item, onClose }: { item: Wanted; onClose: () => void })
       }
     >
       <div className="stack">
-        {search.pending && <div className="muted">Searching Prowlarr's book categories…</div>}
+        {search.pending && <div className="muted">Searching Prowlarr's {flow.noun} categories…</div>}
         {search.error && <Alert tone="err" title="Search failed">{search.error}</Alert>}
         {grab.error && <Alert tone="err" title="Grab failed">{grab.error}</Alert>}
         {data && (
           <>
             <p className="muted small">
-              Searched <span className="mono">{data.query}</span>. Ranked epub, then azw3, mobi, pdf; then seeders.
+              Searched <span className="mono">{data.query}</span>. Ranked {flow.ranking}; then seeders.
               {data.bestGuid ? " The best match is selected." : " No release matches the title and has seeders, so nothing is pre-selected."}
             </p>
             {data.releases.length === 0 ? (
-              <EmptyState icon="search" title="No releases found" message="No indexer has a torrent for this in the book categories." />
+              <EmptyState icon="search" title="No releases found" message={`No indexer has a torrent for this in the ${flow.noun} categories.`} />
             ) : (
               <TableWrap>
                 <table className="table">

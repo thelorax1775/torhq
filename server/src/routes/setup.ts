@@ -20,8 +20,8 @@ const ServiceInput = z.object({
 const LibraryInput = z.object({
   key: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/),
   label: z.string().min(1).max(64),
-  kind: z.enum(["books", "manga", "comics", "music"]),
-  targetService: z.enum(["kavita", "navidrome"]),
+  kind: z.enum(["books", "manga", "comics", "music", "audiobooks"]),
+  targetService: z.enum(["kavita", "navidrome", "audiobookshelf"]),
   destPath: z.string().min(1),
   stagingPath: z.string().min(1),
   rescan: z.boolean().optional(),

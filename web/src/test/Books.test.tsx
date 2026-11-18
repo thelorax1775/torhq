@@ -43,3 +43,20 @@ describe("Books page", () => {
     expect(screen.getByText("Your requests")).toBeInTheDocument();
   });
 });
+
+describe("Audiobooks page (the same page, kind=audiobook)", () => {
+  it("talks to /api/audiobooks and uses audiobook wording and ranking", async () => {
+    const api = mockApi({
+      "/api/audiobooks/wanted": { items: [{ ...ready, id: "a1", releaseFormat: "m4b" }] },
+      "/api/audiobooks/status": { ready: true, problems: [], category: "torhq-audiobooks" },
+      "POST /api/audiobooks/wanted/a1/approve": { ok: true },
+    });
+    render(<MemoryRouter><Books role="admin" kind="audiobook" /></MemoryRouter>);
+    expect(await screen.findByRole("heading", { name: "Audiobooks" })).toBeInTheDocument();
+    expect(screen.getByRole("search")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search audiobooks")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /approve import/i }));
+    await waitFor(() => expect(api.calls.some((c) => c.method === "POST" && c.path === "/api/audiobooks/wanted/a1/approve")).toBe(true));
+    expect(api.calls.some((c) => c.path.startsWith("/api/books"))).toBe(false);
+  });
+});

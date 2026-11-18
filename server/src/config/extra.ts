@@ -13,6 +13,11 @@ const KavitaExtra = z.object({
   libraryId: z.coerce.number().int().positive().optional(),
 });
 
+const AudiobookshelfExtra = z.object({
+  // ABS library id (a uuid) to search and scan; blank = the first book library.
+  libraryId: z.string().trim().max(64).optional(),
+});
+
 const SlskdExtra = z.object({
   // Shared token that authenticates the /webhooks/slskd completed-download hook.
   webhookToken: z.string().min(8).max(256).optional(),
@@ -113,6 +118,7 @@ const EXTRA_SCHEMAS: Partial<Record<string, z.ZodTypeAny>> = {
   sonarr: ArrExtra,
   lidarr: ArrExtra,
   kavita: KavitaExtra,
+  audiobookshelf: AudiobookshelfExtra,
   slskd: SlskdExtra,
   torrentsearch: TorrentSearchExtra,
   prowlarr: ProwlarrExtra,
