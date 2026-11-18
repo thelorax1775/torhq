@@ -166,7 +166,7 @@ export function Dashboard() {
                 ))}
                 {broken.length > 5 && (
                   <div className="small muted" style={{ padding: "8px 0 0" }}>
-                    …and {broken.length - 5} more on the Queue page.
+                    …and {broken.length - 5} more on the Transfers page.
                   </div>
                 )}
               </div>

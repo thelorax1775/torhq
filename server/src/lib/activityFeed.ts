@@ -101,34 +101,34 @@ function explainImportFailure(item: ArrQueueItem, name: string): Stall {
   const raw = item.errorMessage ?? item.statusMessages[0] ?? item.trackedDownloadState ?? "";
   const text = [item.errorMessage, ...item.statusMessages].filter(Boolean).join(" ");
   const detail = raw || undefined;
-  const queue = `Open Transfers, then Failed imports,`;
+  const queue = `Open Transfers; it is listed under Needs attention with the reason.`;
   if (/no files found are eligible|no video files|sample/i.test(text)) {
     return {
       reason: "The download finished, but there was nothing in it that could be imported (often a sample, an archive, or the wrong release).",
-      fix: `${queue} to see what arrived; remove it and blocklist the release so ${name} grabs a different one.`, detail,
+      fix: `${queue} Remove its row in the Transfers list and tick "Don't grab this release again (blocklist it)" so ${name} grabs a different one.`, detail,
     };
   }
   if (/unable to parse|unknown (movie|series|artist)|couldn't be matched|not matched|unable to identify|matched to/i.test(text)) {
     return {
       reason: `${name} could not tell which title this download belongs to.`,
-      fix: `${queue} then use Manual import to point it at the right title, or blocklist the release.`, detail,
+      fix: `${queue} Point it at the right title on ${name}'s own Activity page, or remove its row on Transfers and blocklist the release.`, detail,
     };
   }
   if (/does not exist|not accessible|permission|access (is )?denied|no such file|directory/i.test(text)) {
     return {
       reason: `${name} cannot reach the downloaded files; the download folder is probably not shared with it.`,
-      fix: `Open Transfers and read Pipeline health, which says which folder ${name} cannot see and how to mount it.`, detail,
+      fix: `Open Transfers and read Needs attention, which says which folder ${name} cannot see and how to mount it.`, detail,
     };
   }
   if (/not an upgrade|already (have|imported)|existing file|exists/i.test(text)) {
     return {
       reason: `${name} already has this, or something at least as good, so it declined the import.`,
-      fix: "Nothing is lost. Remove it on Transfers, or open Failed imports there to force it in.", detail,
+      fix: `Nothing is lost. Remove its row on Transfers, or replace the existing file from ${name}'s own Activity page.`, detail,
     };
   }
   return {
     reason: `${name} downloaded it but refused to import it.`,
-    fix: `${queue} read the reason, then fix it and use Manual import, or remove and blocklist the release.`, detail,
+    fix: `${queue} Fix the cause, then press Retry import there, or remove its row and blocklist the release.`, detail,
   };
 }
 
@@ -223,7 +223,7 @@ function classifyQueueItem(
     return { stage: "importing", eta: null, stall: cause
       ? { reason: cause.detail, fix: cause.fix! }
       : { reason: `${name} has had this waiting to import for over an hour.`,
-          fix: "Open Transfers and read Pipeline health for why, then use Manual import." } };
+          fix: "Open Transfers: Needs attention says why, and Retry import asks the app to try again." } };
   }
 
   // Still downloading: let the download client say if it is going nowhere.
@@ -232,7 +232,7 @@ function classifyQueueItem(
     if (tstate === "error" || tstate === "missingFiles") {
       return { stage: "downloading", eta, stall: {
         reason: "qBittorrent hit an error with this download (usually a full disk or missing files).",
-        fix: "Open Transfers, check free space and the torrent's state, then resume or recheck it.",
+        fix: "Open Transfers, check free space and the torrent's state, then resume it, or remove it and add the title again.",
       } };
     }
     if (tstate === "pausedDL" || tstate === "stoppedDL") {
@@ -348,7 +348,7 @@ export function buildFeed(input: FeedInput, viewer: Viewer): FeedItem[] {
         etaSeconds: !done && t.eta > 0 && t.eta < NO_ETA ? t.eta : null,
         startedAt, requestedBy: null, source: "torrent",
         stall: stalled ? { reason: "qBittorrent hit an error with this download (usually a full disk or missing files).",
-          fix: "Open Transfers, check free space and the torrent's state, then resume or recheck it." } : undefined,
+          fix: "Open Transfers, check free space and the torrent's state, then resume it, or remove it and add the title again." } : undefined,
         href: "/transfers",
       });
     }
@@ -364,7 +364,7 @@ export function buildFeed(input: FeedInput, viewer: Viewer): FeedItem[] {
         stage: "downloading", status: stalled ? "stalled" : "active", progress, etaSeconds: null,
         startedAt: now, requestedBy: null, source: "slskd",
         stall: stalled ? { reason: "Every file from this Soulseek user failed or was refused.",
-          fix: "Open Transfers and retry from another user." } : undefined,
+          fix: "Nothing on TorHQ can retry it; remove the album and add it again from Search so a different source is tried." } : undefined,
         href: "/transfers",
       });
     }

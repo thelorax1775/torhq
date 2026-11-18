@@ -140,7 +140,7 @@ export function History() {
                 <EmptyState
                   icon="clock"
                   title={jobs.length ? "Nothing matches that filter" : "No jobs yet"}
-                  message={jobs.length ? "Clear the filter to see the rest." : "Manual intake jobs queued from the Intake page will show up here."}
+                  message={jobs.length ? "Clear the filter to see the rest." : "Hand imports started from Imports to approve will show up here."}
                 />
               ) : (
                 <TableWrap>

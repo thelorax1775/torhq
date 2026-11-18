@@ -85,7 +85,7 @@ function blockedReason(r: HubResult): string | null {
     return "Adding books isn't set up yet: it needs Prowlarr and qBittorrent under Services.";
   }
   if (r.kind === "game") {
-    return "Adding games from here isn't set up yet. An admin can still grab one from Raw search.";
+    return "Adding games from here isn't set up yet. An admin can still grab one with Search indexers, linked at the bottom of Search results.";
   }
   if (!r.actionable) {
     if (r.kind === "tv") return "This show has no TVDB id, so Sonarr can't add it.";
