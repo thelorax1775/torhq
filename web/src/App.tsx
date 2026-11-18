@@ -15,16 +15,13 @@ import { Button, Card } from "./components/ui.js";
 import { Login } from "./pages/Login.js";
 import { Home } from "./pages/Home.js";
 import { Dashboard } from "./pages/Dashboard.js";
-import { Acquire } from "./pages/Acquire.js";
 import { Discover } from "./pages/Discover.js";
 import { Search } from "./pages/Search.js";
 import { Activity } from "./pages/Activity.js";
-import { Downloads } from "./pages/Downloads.js";
-import { Queue } from "./pages/Queue.js";
-import { Requests } from "./pages/Requests.js";
 import { Books } from "./pages/Books.js";
-import { Intake } from "./pages/Intake.js";
-import { Jobs } from "./pages/Jobs.js";
+import { Imports } from "./pages/Imports.js";
+import { History } from "./pages/History.js";
+import { Transfers } from "./pages/Transfers.js";
 import { Libraries } from "./pages/Libraries.js";
 import { Mounts } from "./pages/Mounts.js";
 import { Services } from "./pages/Services.js";
@@ -41,7 +38,49 @@ export function Redirect({ to }: { to: string }) {
 }
 
 export function RequireAdmin({ role, children }: { role: Me["role"]; children: ReactElement }) {
-  return role === "admin" ? children : <Navigate to="/requests" replace />;
+  return role === "admin" ? children : <Navigate to="/" replace />;
+}
+
+/**
+ * Pages that were folded into others. Each old URL lands on the page that now
+ * does its job, so bookmarks keep working:
+ *   /get       -> /           (Search; pick a release under Options > Choose release)
+ *   /requests  -> /activity   (admins land on its Requests tab)
+ *   /downloads, /queue -> /transfers
+ *   /jobs      -> /history
+ *   /intake    -> /imports
+ */
+export function AppRoutes({ role, onLogout }: { role: Me["role"]; onLogout: () => void }) {
+  const admin = (el: ReactElement) => <RequireAdmin role={role}>{el}</RequireAdmin>;
+  return (
+    <Routes>
+      <Route element={<Layout onLogout={onLogout} role={role} />}>
+        <Route path="/" element={<Home role={role} />} />
+        <Route path="/dashboard" element={admin(<Dashboard />)} />
+        <Route path="/discover" element={<Discover role={role} />} />
+        <Route path="/catalogue" element={<Redirect to="/discover" />} />
+        <Route path="/get" element={<Redirect to="/" />} />
+        <Route path="/search" element={admin(<Search />)} />
+        <Route path="/activity" element={<Activity role={role} />} />
+        <Route path="/requests" element={<Navigate to={role === "admin" ? "/activity?view=requests" : "/activity"} replace />} />
+        <Route path="/transfers" element={admin(<Transfers />)} />
+        <Route path="/downloads" element={<Redirect to="/transfers" />} />
+        <Route path="/queue" element={<Redirect to="/transfers" />} />
+        <Route path="/history" element={admin(<History />)} />
+        <Route path="/jobs" element={<Redirect to="/history" />} />
+        <Route path="/books" element={<Books role={role} />} />
+        <Route path="/audiobooks" element={<Books role={role} kind="audiobook" />} />
+        <Route path="/imports" element={admin(<Imports />)} />
+        <Route path="/intake" element={<Redirect to="/imports" />} />
+        <Route path="/libraries" element={admin(<Libraries />)} />
+        <Route path="/mounts" element={admin(<Mounts />)} />
+        <Route path="/services" element={admin(<Services />)} />
+        <Route path="/settings" element={admin(<Settings />)} />
+        <Route path="/users" element={admin(<Users />)} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
+  );
 }
 
 export function App() {
@@ -105,30 +144,5 @@ export function App() {
     return <Login needsSetup={me.needsSetup} onDone={refresh} />;
   }
 
-  return (
-    <Routes>
-      <Route element={<Layout onLogout={logout} role={me.role} />}>
-        <Route path="/" element={<Home role={me.role} />} />
-        <Route path="/dashboard" element={<RequireAdmin role={me.role}><Dashboard /></RequireAdmin>} />
-        <Route path="/discover" element={<Discover role={me.role} />} />
-        <Route path="/catalogue" element={<Redirect to="/discover" />} />
-        <Route path="/get" element={<RequireAdmin role={me.role}><Acquire /></RequireAdmin>} />
-        <Route path="/search" element={<RequireAdmin role={me.role}><Search /></RequireAdmin>} />
-        <Route path="/activity" element={<Activity role={me.role} />} />
-        <Route path="/downloads" element={<RequireAdmin role={me.role}><Downloads /></RequireAdmin>} />
-        <Route path="/queue" element={<RequireAdmin role={me.role}><Queue /></RequireAdmin>} />
-        <Route path="/requests" element={<Requests />} />
-        <Route path="/books" element={<Books role={me.role} />} />
-        <Route path="/audiobooks" element={<Books role={me.role} kind="audiobook" />} />
-        <Route path="/intake" element={<RequireAdmin role={me.role}><Intake /></RequireAdmin>} />
-        <Route path="/jobs" element={<RequireAdmin role={me.role}><Jobs /></RequireAdmin>} />
-        <Route path="/libraries" element={<RequireAdmin role={me.role}><Libraries /></RequireAdmin>} />
-        <Route path="/mounts" element={<RequireAdmin role={me.role}><Mounts /></RequireAdmin>} />
-        <Route path="/services" element={<RequireAdmin role={me.role}><Services /></RequireAdmin>} />
-        <Route path="/settings" element={<RequireAdmin role={me.role}><Settings /></RequireAdmin>} />
-        <Route path="/users" element={<RequireAdmin role={me.role}><Users /></RequireAdmin>} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
-  );
+  return <AppRoutes role={me.role} onLogout={logout} />;
 }

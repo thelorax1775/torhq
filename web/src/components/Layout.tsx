@@ -11,7 +11,14 @@ import { Button } from "./ui.js";
 import { usePolled } from "../lib/usePolled.js";
 import { speed } from "../lib/format.js";
 
-interface NavItem { to: string; label: string; icon: IconName; end?: boolean; adminOnly?: boolean }
+interface NavItem {
+  to: string; label: string; icon: IconName; end?: boolean; adminOnly?: boolean;
+  /** Which admin attention count (GET /api/attention) shows as a badge on this link. */
+  badge?: keyof Attention;
+}
+
+/** What waits for the admin: member requests (Activity) and finished downloads to approve (Imports). */
+export interface Attention { requests: number; imports: number }
 
 export const NAV: Array<{ group: string; primary?: boolean; items: NavItem[] }> = [
   {
@@ -20,30 +27,21 @@ export const NAV: Array<{ group: string; primary?: boolean; items: NavItem[] }> 
     items: [
       { to: "/", label: "Search", icon: "search", end: true },
       { to: "/discover", label: "Discover", icon: "grid" },
-      { to: "/activity", label: "Activity", icon: "activity" },
+      { to: "/activity", label: "Activity", icon: "activity", badge: "requests" },
     ],
   },
   {
     group: "Library",
     items: [
-      { to: "/intake", label: "Intake", icon: "inbox", adminOnly: true },
+      { to: "/imports", label: "Imports to approve", icon: "inbox", adminOnly: true, badge: "imports" },
       { to: "/libraries", label: "Libraries", icon: "book", adminOnly: true },
-    ],
-  },
-  {
-    group: "Advanced",
-    items: [
-      { to: "/get", label: "Get", icon: "plus", adminOnly: true },
-      { to: "/search", label: "Raw search", icon: "search", adminOnly: true },
-      { to: "/downloads", label: "Downloads", icon: "download", adminOnly: true },
-      { to: "/queue", label: "Queue", icon: "queue", adminOnly: true },
-      { to: "/jobs", label: "Jobs & log", icon: "clock", adminOnly: true },
-      { to: "/requests", label: "Requests", icon: "star", adminOnly: true },
     ],
   },
   {
     group: "System",
     items: [
+      { to: "/transfers", label: "Transfers", icon: "download", adminOnly: true },
+      { to: "/history", label: "History", icon: "clock", adminOnly: true },
       { to: "/services", label: "Services", icon: "plug", adminOnly: true },
       { to: "/mounts", label: "Mounts", icon: "server", adminOnly: true },
       { to: "/settings", label: "Settings", icon: "settings", adminOnly: true },
@@ -55,6 +53,7 @@ export const NAV: Array<{ group: string; primary?: boolean; items: NavItem[] }> 
 /** Pages that are no longer in the nav but keep working, so bookmarks survive. */
 const LEGACY_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard", "/books": "Books", "/audiobooks": "Audiobooks", "/catalogue": "Discover",
+  "/search": "Search indexers",
 };
 
 /** Route → header title. Falls back to the nav label lookup. */
@@ -89,10 +88,18 @@ export function Layout({ onLogout, role }: { onLogout: () => void; role: "admin"
 
   const primary = visibleNav.find((g) => g.primary)?.items ?? [];
 
-  // Global transfer readout. Shares the Downloads page's cache entry, and stays
+  // Global transfer readout. Shares the Transfers page's cache entry, and stays
   // hidden when qBittorrent isn't configured or the route isn't there yet.
   const transfer = usePolled<TransferSummary>("/api/downloads", 15000);
   const t = transfer.data?.transfer;
+
+  // Admin badges: requests waiting in Activity, imports waiting to be approved.
+  const attention = usePolled<Attention>(role === "admin" ? "/api/attention" : null, 30000);
+  const countOf = (item: NavItem) => (item.badge && attention.data ? attention.data[item.badge] : 0);
+  const Count = ({ item }: { item: NavItem }) => {
+    const n = countOf(item);
+    return n > 0 ? <span className="count count-attn" aria-label={`${n} waiting`}>{n}</span> : null;
+  };
 
   return (
     <div className={`shell${navOpen ? " nav-open" : ""}`}>
@@ -115,6 +122,7 @@ export function Layout({ onLogout, role }: { onLogout: () => void; role: "admin"
                 >
                   <Icon name={item.icon} size={16} />
                   {item.label}
+                  <Count item={item} />
                 </NavLink>
               ))}
             </div>
@@ -166,6 +174,7 @@ export function Layout({ onLogout, role }: { onLogout: () => void; role: "admin"
           <NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => `tab-link${isActive ? " active" : ""}`}>
             <Icon name={item.icon} size={20} />
             <span>{item.label}</span>
+            <Count item={item} />
           </NavLink>
         ))}
         <button type="button" className="tab-link" aria-expanded={navOpen} aria-controls="app-nav" onClick={() => setNavOpen((v) => !v)}>

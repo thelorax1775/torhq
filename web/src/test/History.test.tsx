@@ -1,11 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
-import { Jobs } from "../pages/Jobs.js";
+import { History } from "../pages/History.js";
 import { mockApi } from "./mockApi.js";
 
-describe("Jobs & activity", () => {
-  it("a book's 'ready for approval' entry links to the one-click approval on /books", async () => {
+describe("History", () => {
+  it("a book's 'ready for approval' entry links to Imports to approve", async () => {
     mockApi({
       "/api/jobs": { jobs: [] },
       "/api/activity/log": { activity: [
@@ -13,9 +13,9 @@ describe("Jobs & activity", () => {
         { id: 2, jobId: null, kind: "info", service: "books", message: "Book request declined (admin)", createdAt: Date.now() },
       ] },
     });
-    render(<MemoryRouter><Jobs /></MemoryRouter>);
+    render(<MemoryRouter><History /></MemoryRouter>);
     const links = await screen.findAllByRole("link", { name: /approve import/i });
     expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAttribute("href", "/books");
+    expect(links[0]).toHaveAttribute("href", "/imports");
   });
 });

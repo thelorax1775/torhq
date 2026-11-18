@@ -1,5 +1,6 @@
 /**
- * Jobs & activity — TorHQ's own manual-intake worker, not the *arr.
+ * History — what TorHQ did and who asked: the append-only audit log first, then
+ * TorHQ's own import jobs (its manual-intake worker, not the *arr) with retry.
  *
  * Consumes `GET /api/jobs` (the durable job queue), `POST /api/jobs/:id/retry`,
  * and `GET /api/activity/log` (the append-only audit log). A job's own history is
@@ -57,7 +58,7 @@ const KIND_TONE: Record<string, Tone> = {
   importing: "info", imported: "ok", failed: "err",
 };
 
-export function Jobs() {
+export function History() {
   const q = usePolled<JobsResponse>("/api/jobs", 8000);
   const activity = usePolled<ActivityResponse>("/api/activity/log?limit=100", 15000);
 
@@ -81,10 +82,36 @@ export function Jobs() {
   return (
     <>
       <PageHeader
-        title="Jobs & activity"
-        subtitle="TorHQ's own manual-intake worker (books, manga, music) — not the *arr, which import themselves."
-        actions={<RefreshButton q={q} />}
+        title="History"
+        subtitle="What TorHQ did and who asked for it, plus TorHQ's own import jobs, which you can retry if one failed."
+        actions={<RefreshButton q={activity} />}
       />
+
+      <Card title="What happened" subtitle="Newest first; each entry names who asked when someone did." icon="activity">
+        <Async q={activity} what="activity">
+          {(data) => (
+            data.activity.length === 0 ? (
+              <EmptyState icon="activity" title="Nothing logged yet" />
+            ) : (
+              <div className="list">
+                {data.activity.map((a) => (
+                  <div key={a.id} className="list-row">
+                    <Badge tone={KIND_TONE[a.kind] ?? "neutral"}>{a.kind}</Badge>
+                    <div className="grow small break">{a.message}</div>
+                    {(a.service === "books" || a.service === "audiobooks") && /ready for approval/i.test(a.message) && (
+                      <LinkButton to="/imports" size="sm" variant="primary">Approve import</LinkButton>
+                    )}
+                    {a.service && <span className="small dim">{a.service}</span>}
+                    <span className="small dim nowrap">{ago(a.createdAt)}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          )}
+        </Async>
+      </Card>
+
+      <h3 className="section-title mt-3">Import jobs</h3>
 
       <Async q={q} what="jobs">
         {(data) => (
@@ -204,29 +231,6 @@ export function Jobs() {
         )}
       </Async>
 
-      <Card title="Recent activity" subtitle="Every job, request and import event TorHQ has logged." icon="activity">
-        <Async q={activity} what="activity">
-          {(data) => (
-            data.activity.length === 0 ? (
-              <EmptyState icon="activity" title="Nothing logged yet" />
-            ) : (
-              <div className="list">
-                {data.activity.map((a) => (
-                  <div key={a.id} className="list-row">
-                    <Badge tone={KIND_TONE[a.kind] ?? "neutral"}>{a.kind}</Badge>
-                    <div className="grow small break">{a.message}</div>
-                    {(a.service === "books" || a.service === "audiobooks") && /ready for approval/i.test(a.message) && (
-                      <LinkButton to={a.service === "audiobooks" ? "/audiobooks" : "/books"} size="sm" variant="primary">Approve import</LinkButton>
-                    )}
-                    {a.service && <span className="small dim">{a.service}</span>}
-                    <span className="small dim nowrap">{ago(a.createdAt)}</span>
-                  </div>
-                ))}
-              </div>
-            )
-          )}
-        </Async>
-      </Card>
     </>
   );
 }

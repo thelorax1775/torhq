@@ -321,7 +321,7 @@ export function Services() {
     <>
       <PageHeader
         title="Services"
-        subtitle="Connections and credentials for the *arr stack. Secrets are write-only — TorHQ never sends a stored one back to the browser."
+        subtitle="The apps TorHQ talks to (Radarr, Sonarr, qBittorrent and the rest) and how to reach them; saved keys and passwords are never shown again."
         actions={<RefreshButton q={servicesQ} />}
       />
 

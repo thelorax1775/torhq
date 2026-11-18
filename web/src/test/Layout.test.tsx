@@ -49,16 +49,50 @@ describe("Layout navigation", () => {
     expect(labels(screen.getByRole("complementary", { name: "Main" }))).toEqual(["TorHQ", "Search", "Discover", "Activity"]);
   });
 
-  it("gives an admin the three, then Library, Advanced and System in order", () => {
+  it("gives an admin the three, then Library and System in order, with no Advanced group", () => {
     renderLayout("admin");
     const side = screen.getByRole("complementary", { name: "Main" });
     expect(labels(side)).toEqual([
       "TorHQ", "Search", "Discover", "Activity",
-      "Intake", "Libraries",
-      "Get", "Raw search", "Downloads", "Queue", "Jobs & log", "Requests",
-      "Services", "Mounts", "Settings", "Users",
+      "Imports to approve", "Libraries",
+      "Transfers", "History", "Services", "Mounts", "Settings", "Users",
     ]);
-    expect(Array.from(side.querySelectorAll(".nav-group-label")).map((e) => e.textContent)).toEqual(["Library", "Advanced", "System"]);
+    expect(Array.from(side.querySelectorAll(".nav-group-label")).map((e) => e.textContent)).toEqual(["Library", "System"]);
+    expect(screen.queryByText("Advanced")).toBeNull();
+    // Raw search is reached from the bottom of Search results, not the nav.
+    expect(NAV.flatMap((g) => g.items).find((i) => i.to === "/search")).toBeUndefined();
+  });
+
+  it("badges Activity and Imports to approve with what waits for an admin", async () => {
+    mockApi({ "/api/attention": { requests: 2, imports: 1 } });
+    render(
+      <MemoryRouter initialEntries={["/requests"]}>
+        <Routes>
+          <Route element={<Layout onLogout={() => {}} role="admin" />}>
+            <Route path="/requests" element={<div>page body</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    const activity = await sidebar().findByRole("link", { name: /Activity/ });
+    await within(activity).findByText("2");
+    expect(within(sidebar().getByRole("link", { name: /Imports to approve/ })).getByText("1")).toBeInTheDocument();
+    // The phone tab bar carries the Activity badge too.
+    expect(within(screen.getByRole("navigation", { name: "Primary" }).querySelector('a[href="/activity"]') as HTMLElement).getByText("2")).toBeInTheDocument();
+  });
+
+  it("never asks a member's browser for the admin counts", () => {
+    const api = mockApi({ "/api/attention": { requests: 2, imports: 1 } });
+    render(
+      <MemoryRouter initialEntries={["/requests"]}>
+        <Routes>
+          <Route element={<Layout onLogout={() => {}} role="member" />}>
+            <Route path="/requests" element={<div>page body</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(api.called("GET /api/attention")).toHaveLength(0);
   });
 
   it("puts the primary pages in the phone tab bar", () => {

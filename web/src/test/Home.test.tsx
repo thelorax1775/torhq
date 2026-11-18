@@ -59,7 +59,7 @@ describe("Home search hub", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Dune: Part Two/ }));
     expect(await screen.findByRole("button", { name: "Add" })).toBeEnabled();
     await userEvent.click(screen.getByRole("button", { name: "Options" }));
-    expect(await screen.findByRole("link", { name: /Choose release/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Choose release/ })).toBeInTheDocument();
     expect(await screen.findByLabelText("Root folder")).toHaveValue("/movies");
   });
 
@@ -70,6 +70,7 @@ describe("Home search hub", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Options" }));
     await screen.findByLabelText("Quality profile");
     expect(screen.queryByRole("link", { name: /Choose release/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Choose release/ })).toBeNull();
     expect(screen.queryByLabelText("Root folder")).toBeNull();
   });
 

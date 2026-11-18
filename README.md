@@ -10,8 +10,8 @@ web UI. Friends get member accounts to search and request the same way.
 Behind the hub it is also the control plane for the stack it sits in front of:
 service health, downloads (qBittorrent, slskd), queues, and plain-language reasons
 when an import stalls. The product definition lives in
-[`docs/vision.md`](docs/vision.md); where this README describes older pages
-(Get, Raw search, Requests), those are now under **Advanced** for admins.
+[`docs/vision.md`](docs/vision.md). The pages, and what each is for, are under
+[Using TorHQ](#using-torhq).
 
 > **The core boundary.** TorHQ **never moves, renames, or reorganizes media owned
 > by the \*arr applications.** Radarr/Sonarr/Lidarr own search, grab, import,
@@ -27,7 +27,7 @@ when an import stalls. The product definition lives in
 - [Architecture](#architecture)
 - [The intake boundary](#the-intake-boundary-torhq-vs-the-arr)
 - [Discover: browse movies, TV and games](#discover-browse-movies-tv-and-games)
-- [The Get page: one-stop acquisition](#the-get-page-one-stop-acquisition)
+- [Choosing a specific release](#choosing-a-specific-release)
 - [Identifying raw releases](#identifying-raw-releases)
 - [Search, grab, and the import loop](#search-grab-and-the-import-loop)
 - [Local development](#local-development)
@@ -51,11 +51,10 @@ when an import stalls. The product definition lives in
 | **Dashboard** | Aggregated service health, qBittorrent downloads grouped by category, \*arr activity (history + wanted/missing), slskd downloads, storage usage, and failed-import surfacing. |
 | **Identify** | Raw search results are put through Radarr, Sonarr and Lidarr's **own parsers** — the same ones that perform imports — so a release row says what it is and offers to route it to the \*arr that will file it. **Gemini** (optional) handles only the names those parsers cannot read. |
 | **Discover** | Browse what's trending, popular, top rated and upcoming — movies and TV from **TMDB**, games from **RAWG** — with genre and platform filters, and the titles already in Radarr/Sonarr marked. Opening a title shows the same detail sheet and single action (*Add* / *Request*) as Search. |
-| **Get** | The one-stop loop. One box over all three \*arr lookups, then add-to-library, then that \*arr's **own interactive search** for releases (with its quality scoring and rejection reasons), then a grab the \*arr owns end to end. Because the library entry always exists first, the import and the final folder are guaranteed. |
-| **Requests** | Search Radarr/Sonarr/Lidarr, **choose the intended result**, and submit an add+search request. TorHQ asks; the \*arr does the work. |
-| **Search** | Three sources behind one page: **Prowlarr** (aggregated across every indexer), a scraped **torrent-index site**, and a general **web widget**. Grab a chosen release into a neutral `torhq-manual` category, or hand it to `radarr`/`sonarr`/`lidarr` so that \*arr adopts and imports it. |
-| **Downloads** | Full qBittorrent control — pause/resume/recheck, priority, category moves, and both flavours of removal, with the destructive one gated behind a typed confirmation. |
-| **Queue** | The Radarr/Sonarr/Lidarr queues merged into one view, with the \*arr's own error messages surfaced, plus per-item removal and blocklisting. One dead service degrades to a notice; it never blanks the view. |
+| **Choose release** | In the Search detail sheet (admin, under *Options*): add the title to its \*arr without a search, pick a TV season or an album, then choose from that \*arr's **own interactive search** (with its quality scoring and rejection reasons); the \*arr grabs, imports and files it. |
+| **Activity** | Every request followed to *Available*, with stall reasons in plain words. Admins also get a **Requests** tab to approve or decline what friends asked for. |
+| **Search indexers** | Raw search, reached from the bottom of Search results: **Prowlarr** (every indexer), a scraped **torrent-index site**, and a **web widget**. Grab into a neutral `torhq-manual` category, or hand it to `radarr`/`sonarr`/`lidarr` so that \*arr adopts and imports it. |
+| **Transfers** | One table of what qBittorrent, Soulseek and the Radarr/Sonarr/Lidarr queues are doing right now, with pause/resume and removal (deleting files needs a typed confirmation), and anything that will stop an import listed above it. One dead service degrades to a notice; it never blanks the view. |
 | **Pipeline health** | Read-only checks of the grab → download → import path: does the \*arr have a download client, do its categories match, can it actually see the directory qBittorrent writes to. Each failing check names the fix — TorHQ never applies one silently. |
 | **Manual intake** | Preview and then atomically import a completed file/folder into a **Kavita** (books/manga/comics), **Audiobookshelf** (audiobooks) or **Navidrome** (music) library, then trigger a rescan. Per library, either moves the source in or **hardlinks** it so a seeding torrent is left intact. Durable, idempotent, retried. |
 | **slskd webhook** | Completed Soulseek downloads are pushed to `/webhooks/slskd` (shared-token auth) and enqueued as intake jobs into a music library. |
@@ -163,7 +162,7 @@ No \*arr manages books, so TorHQ's own intake does (see
 [the intake boundary](#the-intake-boundary-torhq-vs-the-arr)). The flow, from the
 **Books** page, or straight from the search hub (a book's detail sheet sends
 *Request*; an admin lands on the release picker; a downloaded book shows
-*Approve import* in the sheet and on its Jobs & activity entry):
+*Approve import* in the sheet and on **Imports to approve**):
 
 1. **Search** a title or author (Open Library). Each result says whether you
    already hold it: Kavita's and Calibre-Web's own searches are asked, so a book
@@ -288,7 +287,7 @@ filters in the link.
 | --- | --- | --- |
 | Movies | [TMDB](https://www.themoviedb.org/settings/api) | TMDB ids are what Radarr keys on, so the title added is exact, not a title match. |
 | TV | TMDB | Added through the TVDB id TMDB records for the show, so Sonarr owns it from there. A show with no TVDB id says so. |
-| Games | [RAWG](https://rawg.io/apidocs) | Browse only. No \*arr manages games, so the sheet says adding them from here isn't set up; an admin can still grab one from **Raw search** (Advanced). |
+| Games | [RAWG](https://rawg.io/apidocs) | Browse only. No \*arr manages games, so the sheet says adding them from here isn't set up; an admin can still grab one from **Search indexers** (the link under Search results). |
 
 **Setup.** Both keys are free. Add them under **Services** as `tmdb` and `rawg`;
 they are encrypted at rest like every other credential. TMDB issues two
@@ -302,24 +301,25 @@ so those hosts see the viewer's IP. Titles already in Radarr/Sonarr are worked
 out by reading each library once a minute at most; if an \*arr is down the grid
 still loads, just without the *In library* badges.
 
-## The Get page: one-stop acquisition
+## Choosing a specific release
 
-**Get** is the page to use when you want something. It exists because of a
-sharp, unforgiving rule in every \*arr:
+**Choose release** (Search > a result > *Options*, admin only) is the way to pick
+the exact release yourself instead of letting the \*arr's automatic search
+decide. It replaced the old Get page, and it exists because of a sharp,
+unforgiving rule in every \*arr:
 
 > An \*arr will not import a download for something that is not in its library.
 
 Put a torrent in the `radarr` category for a film Radarr has never heard of and
 it is filed as *Unknown* in Activity. Nothing renames it. Nothing moves it. It
 sits in the download directory forever, and no error is raised anywhere — which
-is exactly the failure this page removes.
+is exactly the failure this flow removes.
 
-So Get runs the steps in the only order that works:
+So Choose release runs the steps in the only order that works:
 
 ```
-1. lookup    one query -> Radarr + Sonarr + Lidarr lookups, in parallel
-                          "dune" is legitimately a film AND a series, so the
-                          service travels with each candidate, not the query
+1. identify  the hub already knows the exact title and which *arr owns it
+             ("dune" the film and "dune" the series are different results)
         |
 2. prepare   add the chosen title to its *arr (root folder + quality profile),
              monitored, WITHOUT an automatic search  ->  library id
@@ -343,14 +343,14 @@ words for why — *"Bluray-2160p is not wanted in profile"*, *"Existing file mee
 cutoff"* — and can still be grabbed as a deliberate override, exactly as the
 \*arr's own UI allows.
 
-**Placement.** Each \*arr has a default root folder and quality profile, shown on
-the confirm step and changeable per grab; tick *Remember* to save the choice.
-With nothing saved, TorHQ falls back to that \*arr's first root folder and first
-quality profile and tells you which it used. Nothing about placement is silent.
+**Placement.** Each \*arr has a default root folder and quality profile, shown
+in the sheet's *Options* and changeable there before you choose a release. With
+nothing saved, TorHQ falls back to that \*arr's first root folder and first
+quality profile and says so under the fields. Nothing about placement is silent.
 
 **Timing.** An interactive search queries every indexer in series and routinely
 takes one to three minutes — on a real stack, 111 releases took over a minute. It
-therefore runs as a background job that the page polls, rather than a request
+therefore runs as a background job that the sheet polls, rather than a request
 held open across a reverse proxy that would kill it half way. Search jobs live in
 memory and expire fifteen minutes after they finish; the durable work is the
 \*arr's, and the \*arr already persists it.
@@ -467,7 +467,7 @@ be able to see the directory qBittorrent writes to.** A download client on a
 different host, or an LXC without the right bind mount, produces a silent
 never-imports loop with no error anywhere.
 
-The **Queue** page runs those checks explicitly (`GET /api/pipeline/check`) and
+The **Transfers** page runs those checks (`GET /api/pipeline/check`) and
 names the fix for each failing one. It also lists downloads that finished but
 could not be imported, and can ask the owning \*arr to scan one again. TorHQ
 never repairs a mismatch itself and never moves a file to work around one.
@@ -622,9 +622,9 @@ database — never in env, never in git. See [`.env.example`](.env.example).
 
 Steps 1–3 get you a working UI. **Steps 4–6 are what make imports actually
 happen** — a stack that skips them looks perfectly configured and silently never
-imports anything. The Queue page's pipeline checks verify all of it, so if you
-would rather not read ahead: do steps 1–3, open **Queue**, and fix whatever it
-tells you.
+imports anything. The pipeline checks on **Transfers** verify all of it, so if you
+would rather not read ahead: do steps 1–3, open **Transfers**, and fix whatever it
+lists under *Needs attention*.
 
 1. **Create the admin account.** The first visit shows a one-time registration
    screen (`POST /api/auth/register`). Once an admin exists, registration is
@@ -691,7 +691,7 @@ tells you.
    Docker users: mount the same host directory at the same path in every
    container, not `/downloads` in one and `/data/torrents` in another.
 
-Then open **Queue** and confirm the pipeline checks are green. A scripted
+Then open **Transfers** and confirm nothing is listed under *Needs attention*. A scripted
 walkthrough of every endpoint is in [`docs/curl-examples.md`](docs/curl-examples.md).
 
 ---
@@ -700,8 +700,27 @@ walkthrough of every endpoint is in [`docs/curl-examples.md`](docs/curl-examples
 
 Everyone gets three pages: **Search**, **Discover** and **Activity**. On a phone
 they are the tab bar along the bottom (with *More* for the full menu); on a
-desktop they head the sidebar. Admins also get **Library**, **Advanced** and
-**System** below them.
+desktop they head the sidebar. Admins also get **Library** and **System** below
+them. Every page says in one line, under its title, what it is for.
+
+| Group | Page | What it is for |
+| --- | --- | --- |
+| | **Search** | Find anything and add it (admin) or ask for it (member). |
+| | **Discover** | Browse what's trending or popular, then add it the same way. |
+| | **Activity** | Follow everything that was asked for until it is ready. Admins: the *Requests* tab, with a count on the nav link. |
+| Library | **Imports to approve** | Finished book and audiobook downloads waiting for your OK (count on the nav link), and importing a folder by hand. |
+| Library | **Libraries** | The folders TorHQ files books, comics, audiobooks and music into when it imports them itself. |
+| System | **Transfers** | What qBittorrent, Soulseek and the \*arr queues are doing right now. |
+| System | **History** | What TorHQ did and who asked, plus its own import jobs. |
+| System | **Services** | The apps TorHQ talks to, and how to reach them. |
+| System | **Mounts** | The network shares TorHQ can see and the free space where it may write. |
+| System | **Settings** | This browser's display preferences and what this TorHQ may touch. |
+| System | **Users** | Accounts for you and your friends. |
+
+Old bookmarks keep working: `/get` opens Search, `/requests` opens Activity
+(its Requests tab for an admin), `/downloads` and `/queue` open Transfers, `/jobs`
+opens History, `/intake` opens Imports to approve, `/catalogue` opens Discover.
+`/dashboard`, `/books` and `/audiobooks` still render but are not in the nav.
 
 ### Search (home)
 
@@ -712,10 +731,36 @@ for an admin (adds the title to Radarr/Sonarr/Lidarr, then asks that app to run
 its own automatic search) or **Request** for a member. It is disabled, with the
 reason on it, when the title is already available, requested or downloading.
 **Options** shows the quality profile and root folder, prefilled from your saved
-defaults; admins also get **Choose release**, which opens the Get page's release
-picker. A source that is down or unconfigured shows why above the results
-instead of hiding. After adding, the badge flips to *Requested* and a toast
-links to Activity.
+defaults; admins also get **Choose release** there, which picks a specific
+release without leaving the sheet: for a film the \*arr's search starts at once,
+for TV you choose a season, for music an album (or the whole artist). Releases
+the \*arr would refuse are hidden behind *Show refused*, each with its reason, and
+can still be grabbed on purpose. See [Choosing a specific release](#choosing-a-specific-release).
+A source that is down or unconfigured shows why above the results instead of
+hiding. After adding, the badge flips to *Requested* and a toast links to Activity.
+
+Under an admin's results, **Not finding it? Search indexers directly** opens the
+raw indexer search with the same words. Use it when the hub can't find the thing
+at all (a specific edition, a game, a file no app tracks):
+
+- **Prowlarr** aggregates every indexer you run. Narrow it with the indexer and
+  category filters when a search is too broad.
+- **Torrent site** is the scraper, useful when Prowlarr is down or unconfigured.
+- **Web** is a link-out widget for working out *what* you want. It returns links,
+  never grabbable releases.
+
+Each row is **identified**: a badge says what it is and which \*arr owns it, with
+**Send to Radarr/Sonarr/Lidarr** beside it, which adds the title to the \*arr
+first and *then* grabs, so it imports and files itself. A plain **Grab** goes
+where **Send grabs to** says: an \*arr's category (that \*arr is asked to poll at
+once), `torhq-manual` (nothing imports it) or `torhq-games`. See
+[Identifying raw releases](#identifying-raw-releases) and
+[Search, grab, and the import loop](#search-grab-and-the-import-loop).
+
+> Grabbing into an \*arr's category only imports if that title is **added and
+> monitored** in the \*arr; otherwise it is filed as *Unknown* and never
+> imported. Use **Send to …** or **Choose release**, which guarantee the library
+> entry exists before the grab.
 
 ### Discover
 
@@ -726,153 +771,67 @@ the same detail sheet and the same single action as Search. See
 
 ### Activity
 
-Every title you added or requested, tracked from *Requested* to *Available*, with
-progress and, when something is stuck, the reason and the fix in plain words.
-Members see their own; admins see everything.
-
-### Admin pages
-
-Admins reach these from the sidebar (or *More* on a phone). Old bookmarks to
-`/catalogue`, `/dashboard`, `/books` and `/audiobooks` still work.
-
-- **Library** — *Intake* and *Libraries* (below).
-- **Advanced** — *Get*, *Raw search*, *Downloads*, *Queue*, *Jobs & log* and
-  *Requests* (the admin view of what members asked for).
-- **System** — *Services*, *Mounts*, *Settings* and *Users*.
-
-### Dashboard
-
-Admin only, at `/dashboard`. Ordered by what actually goes wrong. Pipeline health leads —
-those checks are what silently break imports — then current transfers and queue
-depth, then service health, storage and failed intake jobs. Every card polls
-independently, so one unreachable service degrades to a notice instead of
-blanking the page.
-
-### Acquire
-
-**Get** — the one-stop page, and the one to reach for by default.
-
-1. Type a title. Results come from all three \*arr lookups at once, each tagged
-   *Movie*, *TV* or *Music*, with the ones already in a library first.
-2. Pick one, check where it is going (root folder + quality profile, prefilled
-   from the saved defaults), and *Add and continue*. It is added monitored, with
-   no automatic search, so nothing is grabbed before you choose it.
-3. For TV pick a season; for music pick an album or search the whole artist.
-   Then the \*arr searches its indexers — a minute or three, with a live counter.
-4. Pick a release and *Grab*. Releases your quality profile accepts are listed
-   first; the rest are hidden behind *Show N rejected by the profile*, each with
-   the \*arr's reason, and grabbable anyway as an explicit override.
-
-From there the \*arr owns it: watch the transfer on **Downloads** and the import
-on **Queue**. It lands in the root folder shown in step 2.
-
-Mechanism, and why the order matters, is in
-[The Get page](#the-get-page-one-stop-acquisition).
-
-**Raw search** — free-text search across the sources. Pick a source, type a term,
-and every result row ends in a grab.
-
-Each row is also **identified**: a badge under the release name says what it is
-and which \*arr owns it, with **Send to Radarr/Sonarr/Lidarr** beside it. That
-button adds the title to the \*arr first and *then* grabs, so it imports and
-files itself — a plain **Grab** does not. See
-[Identifying raw releases](#identifying-raw-releases) for how identification
-works and where Gemini fits.
-
-- **Prowlarr** aggregates every indexer you run. This is the one to reach for.
-  Narrow it with the indexer and category filters when a search is too broad.
-- **Torrent site** is the scraper, useful when Prowlarr is down or unconfigured.
-- **Web** is a link-out widget for working out *what* you want. It returns links,
-  never grabbable releases.
-
-Set **Send grabs to** before you grab — it decides what happens next:
-
-| Target | What happens |
-| --- | --- |
-| Radarr / Sonarr / Lidarr | The release goes to that \*arr's category and the \*arr is asked to poll immediately, so it adopts and imports without waiting. |
-| qBittorrent (manual) | Lands in `torhq-manual`. Nothing imports it; it is yours to organize. |
-| qBittorrent (games) | Lands in `torhq-games`. Same as manual, kept separate; Discover sets this for games. |
-
-The whole query — source, term, filters — lives in the URL, so a search is
-reloadable and shareable. `seeders: —` means the indexer reported no count; it
-does not mean zero.
-
-An unavailable source is shown disabled with the reason rather than hidden, so
-"Prowlarr: no enabled indexers" is visible instead of a silently missing tab.
-
-How a grab is actually routed, and what is accepted, is in
-[Search, grab, and the import loop](#search-grab-and-the-import-loop).
-
-> Grabbing into an \*arr's category only imports if that title is **added and
-> monitored** in the \*arr — otherwise it is filed as *Unknown* and never
-> imported. Use **Get**, which guarantees the library entry exists before the
-> grab, or grab to `torhq-manual` and handle it yourself.
-
-**Downloads** — everything in qBittorrent. Filter by state or category, select
-rows for bulk pause/resume/recheck/priority/category moves. Two removals:
-*Remove* takes the torrent out of the client and **leaves the files**;
-*Remove + delete files* destroys the data and requires typing `DELETE`.
-
-**Queue** — the \*arr side of those same downloads, and the page to open when
-something did not import.
-
-- **Pipeline health** — the checks from setup steps 4–6, re-run live. Each
-  failing check names the fix. TorHQ never applies one for you.
-- **Failed imports** — finished downloads the \*arr refused. *Retry import* asks
-  the owning \*arr to scan it again; the \*arr still does the moving and renaming.
-- **The queue itself** — expand a row for the \*arr's own error messages.
-  Removing an item can optionally also drop the torrent and blocklist the release
-  so it is not grabbed again. Files stay on disk either way.
-- **Poll download clients** forces every \*arr to check qBittorrent now, instead
-  of waiting for its own timer.
-
-**Requests** — ask an \*arr to add something new. Pick the route, search that
-\*arr's own lookup, choose the exact candidate (never "the first hit"), set the
-profile and root folder, confirm. TorHQ's job ends at that POST; the \*arr owns
-everything after.
-
-### Library
-
-**Intake** — manual staging for content the \*arr do not own: books, manga,
-comics and music going to Kavita/Navidrome. **Preview is mandatory** — a dry run
-validates both paths against the approved roots and shows exactly what would
-move, and the Import button disables itself the moment the form stops matching
-the preview, so a stale preview can never justify a different import. The preview
-also states what will happen to the source — a library in *Move* mode raises an
-explicit warning that the source is about to be deleted. This never touches a
-Radarr/Sonarr/Lidarr library.
-
-**Books** — search, request, pick a release and approve the import preview for
-ebooks; see [Books](#books-ebooks). **Audiobooks** is the same page for audiobooks;
-see [Audiobooks](#audiobooks-audiobookshelf).
-
-**Libraries** — the Kavita/Navidrome destinations intake can target, each with
-its **import mode** (*Move* or *Hardlink* — see
-[the intake boundary](#the-intake-boundary-torhq-vs-the-arr)). Removing one
-only makes TorHQ forget it; nothing on disk is deleted, and the removal is
-refused while intake jobs are still queued against it.
-
-**Activity** — the one place to watch what was asked for arrive. Each item moves
-through requested → searching → downloading → importing → available, with a
-stage stepper, a progress bar and ETA, and who asked. When something stalls it says
+Every title you added or requested, tracked from *Requested* to *Available*:
+requested → searching → downloading → importing → available, with a stage
+stepper, a progress bar and ETA, and who asked. When something stalls it says
 why in plain words and what to do (an import the \*arr refused, a download nobody
 is sharing, a search that found nothing for hours, a download folder the \*arr
 cannot see). Filter by in progress, stalled or done; it refreshes itself. Members
 see their own requests plus other people's in-flight items as generic progress;
-the admin sees everything and each row links to the underlying page. It replaces
-the old split between Downloads, Queue and Jobs, which stay reachable for the
-admin under **Advanced** in the nav.
+the admin sees everything, and each row links to Transfers or History for the
+detail.
 
-**Jobs & log** (Advanced, admin) — TorHQ's own intake worker, not the \*arr. Filter
-by status, expand a row for that job's history, retry a failed or dead one. The
-feed below is the append-only audit log of every action TorHQ took
-(`GET /api/activity/log`).
+**Requests** (admin tab, with a count on the Activity nav link) — what friends
+asked for that waits for you. Movies, TV and music never wait: Radarr, Sonarr and
+Lidarr start looking for those by themselves. Books and audiobooks have no app
+to do that, so each request waits here: **Approve** has TorHQ search Prowlarr and
+grab the best match (epub/m4b first, then seeders), **Decline** closes it, and
+*Choose the release yourself* opens the Books or Audiobooks page's release picker.
+
+### Library
+
+**Imports to approve** — when a requested book or audiobook finishes downloading,
+TorHQ builds an import preview (what will be filed, where, how big) and it waits
+here, with a count on the nav link, until you **Approve import** or **Decline**.
+Nothing moves before that. Below it, **Import files by hand** stages content the
+\*arr do not own (books, manga, comics, music) into a library. **Preview is
+mandatory**: a dry run validates both paths against the approved roots and shows
+exactly what would move, and the Import button disables itself the moment the
+form stops matching the preview. A library in *Move* mode warns that the source
+is about to be deleted. This never touches a Radarr/Sonarr/Lidarr library.
+
+**Libraries** — the destinations TorHQ's own imports file into (Kavita,
+Audiobookshelf, Navidrome), each with its **import mode** (*Move* or *Hardlink*;
+see [the intake boundary](#the-intake-boundary-torhq-vs-the-arr)). Removing one
+only makes TorHQ forget it; nothing on disk is deleted, and the removal is
+refused while import jobs are still queued against it.
+
+The **Books** and **Audiobooks** pages (`/books`, `/audiobooks`, not in the nav)
+hold the manual release picker for a book request; see [Books](#books-ebooks).
 
 ### System
 
-**Services** — connections and credentials, with a per-service *Test connection*
+**Transfers** — one table of what qBittorrent, Soulseek (slskd) and the
+Radarr/Sonarr/Lidarr queues are doing right now: *Name*, *From*, *Status*,
+*Progress*, *Size*, *Time left*. An \*arr queue item and the torrent behind it are
+one row (*Radarr via qBittorrent*); each name links to its item in Activity.
+Expand a row for the app's own messages. Pause or resume a torrent; **Remove** an
+\*arr queue item (optionally also from qBittorrent, and optionally blocklisting the
+release so it is not grabbed again; files stay on disk), or remove a plain
+torrent, where deleting its files needs `DELETE` typed. Above the table,
+**Needs attention** lists the pipeline checks that fail (each with the fix) and
+downloads an \*arr refused to import, with *Retry import*. **Check for finished
+downloads** asks every \*arr to poll its download client now. Apps that are not
+set up are named in one quiet line under the table.
+
+**History** — what TorHQ did and who asked: the append-only audit log of every
+request, grab, import and change (`GET /api/activity/log`), newest first. Below
+it, TorHQ's own import jobs (not the \*arr's): filter by status, expand a row for
+that job's history, retry a failed or dead one.
+
+**Services** — the apps TorHQ talks to, with a per-service *Test connection*
 that reports the real reason for a failure (wrong port, 401, timeout) rather than
-a generic error.
+a generic error. Saved keys and passwords are never shown again.
 
 **Mounts** — read-only storage visibility: which network shares are bind-mounted
 in, and free space on each approved root. TorHQ runs unprivileged and cannot
@@ -882,6 +841,15 @@ for you to run — nothing on this page changes storage.
 **Settings** — theme (system/dark/light) and background refresh rate, both stored
 in this browser only, plus the approved roots this instance is allowed to touch.
 Turning the refresh rate down is worth doing for an always-on wall display.
+
+**Users** — accounts for you and your friends. A friend (member) can search, ask
+for things and follow them in Activity; every admin page and admin API answers a
+member with 403.
+
+### Dashboard
+
+Admin only, at `/dashboard` (not in the nav). Pipeline health, current transfers
+and queue depth, service health, storage and failed import jobs on one page.
 
 ---
 
