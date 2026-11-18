@@ -37,8 +37,9 @@ export function Login({ needsSetup, onDone }: { needsSetup: boolean; onDone: () 
           </div>
           <h3 style={{ marginBottom: "var(--s4)" }}>{needsSetup ? "Create the admin account" : "Sign in"}</h3>
 
-          <Field label="Username">
+          <Field label="Username" htmlFor="login-username">
             <input
+              id="login-username"
               className="input"
               value={username}
               autoFocus
@@ -49,9 +50,11 @@ export function Login({ needsSetup, onDone }: { needsSetup: boolean; onDone: () 
           <Field
             label="Password"
             hint={needsSetup ? "At least 8 characters. This is the only account TorHQ creates." : undefined}
+            htmlFor="login-password"
             error={tooShort ? "Password must be at least 8 characters." : undefined}
           >
             <input
+              id="login-password"
               className="input"
               type="password"
               value={password}
