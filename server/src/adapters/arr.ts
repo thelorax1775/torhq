@@ -68,6 +68,8 @@ export interface ArrQueueItem {
   outputPath?: string;
   /** ISO timestamp; absent on older *arr builds. */
   added?: string;
+  /** The library entry this download belongs to: movieId / seriesId / artistId. Absent when unmatched. */
+  libraryId?: number;
 }
 
 /**
@@ -111,6 +113,24 @@ export interface ArrParseResult {
   seasonNumber?: number;
   matchedId: number | null;
   matchedTitle?: string;
+}
+
+/** One lookup result with the library state the *arr reports for it. */
+export interface ArrLookupHit {
+  selectionId: string;
+  /** The *arr's own library id; set only when the title is already in the library. */
+  libraryId?: number;
+  title: string;
+  year?: number;
+  subtitle?: string;
+  poster?: string;
+  backdrop?: string;
+  overview?: string;
+  monitored: boolean;
+  /** Imported files: 0/1 for a movie, episode files for a series, track files for an artist. */
+  fileCount: number;
+  genres: string[];
+  seasons?: ArrSeason[];
 }
 
 /** A season of a series, for Sonarr's per-season interactive search. */
@@ -245,6 +265,7 @@ export class ArrAdapter implements ServiceAdapter {
       downloadId: r.downloadId || undefined,
       outputPath: r.outputPath || undefined,
       added: r.added || undefined,
+      libraryId: [r.movieId, r.seriesId, r.artistId].find((n) => typeof n === "number" && n > 0),
     };
   }
 
@@ -340,6 +361,55 @@ export class ArrAdapter implements ServiceAdapter {
       case "sonarr": return raw?.tvdbId != null ? `tvdb:${raw.tvdbId}` : null;
       case "lidarr": return raw?.foreignArtistId ? `mbid:${raw.foreignArtistId}` : null;
     }
+  }
+
+  /**
+   * Lookup results with the library state the *arr reports for each: `id` set
+   * means it is already in the library, and the file counts say whether
+   * anything has been imported. Read-only.
+   */
+  async lookupHits(term: string): Promise<ArrLookupHit[]> {
+    const out: ArrLookupHit[] = [];
+    const found = await this.lookup(term);
+    // /lookup does not report file state for titles already held (Radarr has no
+    // hasFile, Sonarr/Lidarr zero the statistics), so read each held title's
+    // own library record. Read-only; a record that can't be read keeps the
+    // lookup's values rather than failing the search.
+    const library = await Promise.all(found.map(async (r) => {
+      if (!(typeof r?.id === "number" && r.id > 0)) return null;
+      try {
+        return await httpJson<any>(this.cfg.baseUrl, this.api(`${RESOURCE[this.kind]}/${r.id}`), { headers: this.hdr() });
+      } catch { return null; }
+    }));
+    for (const [i, lookupRow] of found.entries()) {
+      const r = library[i] ? { ...lookupRow, ...library[i] } : lookupRow;
+      const selectionId = this.selectionIdOf(r);
+      if (!selectionId) continue;
+      const stats = r.statistics ?? {};
+      const fileCount = this.kind === "radarr"
+        ? (r.hasFile ? 1 : 0)
+        : this.kind === "sonarr" ? numberOrUndefined(stats.episodeFileCount) ?? 0
+        : numberOrUndefined(stats.trackFileCount) ?? 0;
+      out.push({
+        selectionId,
+        libraryId: typeof r.id === "number" && r.id > 0 ? r.id : undefined,
+        title: r.title ?? r.artistName ?? "unknown",
+        year: numberOrUndefined(r.year),
+        subtitle: this.kind === "lidarr" ? (r.disambiguation || undefined)
+          : this.kind === "sonarr" ? (r.network || undefined) : (r.studio || undefined),
+        poster: pickPoster(r.images),
+        backdrop: pickImage(r.images, "fanart"),
+        overview: typeof r.overview === "string" && r.overview ? r.overview.slice(0, 600) : undefined,
+        monitored: !!r.monitored,
+        fileCount,
+        genres: Array.isArray(r.genres) ? r.genres.filter((g: unknown) => typeof g === "string") : [],
+        seasons: this.kind === "sonarr" && Array.isArray(r.seasons)
+          ? r.seasons.map((x: any) => ({ seasonNumber: x.seasonNumber, monitored: !!x.monitored,
+              episodeFileCount: x.statistics?.episodeFileCount, totalEpisodeCount: x.statistics?.totalEpisodeCount }))
+          : undefined,
+      });
+    }
+    return out;
   }
 
   /** Search and return normalized candidates for the user to choose from. */
@@ -681,6 +751,12 @@ function flattenStatusMessages(raw: any): string[] {
     else if (typeof m?.title === "string" && m.title) out.push(m.title);
   }
   return [...new Set(out)];
+}
+
+function pickImage(images: any, coverType: string): string | undefined {
+  if (!Array.isArray(images)) return undefined;
+  const img = images.find((i) => i?.coverType === coverType);
+  return img?.remoteUrl ?? img?.url ?? undefined;
 }
 
 function pickPoster(images: any): string | undefined {
