@@ -1,31 +1,32 @@
-
-# Local agent-tooling scratch, never part of the app
-# build
 # deps
-# logs
-# os
-# runtime data
-# secrets
-# staging/downloads (never commit media)
+node_modules/
 **/node_modules/
+# build
+server/dist/
+web/dist/
+*.tsbuildinfo
+# runtime data
+data/
 *.db
 *.db-*
-*.local
-*.log
 *.sqlite
-*.tsbuildinfo
-.DS_Store
-.claude-flow/
+# secrets
 .env
-.swarm/
-.worktrees/
+*.local
+# logs
+*.log
+# os
+.DS_Store
 Thumbs.db
-data/
+# staging/downloads (never commit media)
+staging/
 downloads/
 libraries/
-node_modules/
+
+# Local agent-tooling scratch, never part of the app
+.claude-flow/
+
+.swarm/
 ruvector.db
-screenshots
-server/dist/
-staging/
-web/dist/
+.worktrees/
+screenshots/
