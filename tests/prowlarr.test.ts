@@ -195,6 +195,39 @@ describe("grab", () => {
   });
 });
 
+/** Shaped like the live Prowlarr 2.6.5 response for TPB/Knaben (public indexers). */
+const PUBLIC = {
+  guid: "magnet:?xt=urn:btih:" + "c".repeat(40) + "&dn=Pride+and+Prejudice",
+  indexerId: 7, indexer: "The Pirate Bay", title: "Pride and Prejudice - Jane Austen (LibriVox)",
+  size: 1000, seeders: 9, leechers: 1, protocol: "torrent", publishDate: "2026-07-20T10:00:00Z",
+  magnetUrl: "http://prowlarr:9696/7/download?apikey=PROWLARRKEY&link=bWFnbmV0&file=Pride",
+  categories: [{ id: 3030, name: "Audio/Audiobook", subCategories: [] }],
+};
+
+describe("public-indexer releases (magnet only in guid)", () => {
+  it("uses the guid magnet as magnetUrl and never leaks the proxy link or key", () => {
+    const r = normalizeReleases([PUBLIC])[0]!;
+    expect(r.magnetUrl).toBe(PUBLIC.guid);
+    expect(JSON.stringify(r)).not.toContain("PROWLARRKEY");
+    expect(JSON.stringify(r)).not.toContain("/download?");
+  });
+
+  it("keeps a real magnetUrl in preference to the guid", () => {
+    const real = "magnet:?xt=urn:btih:" + "d".repeat(40);
+    expect(normalizeReleases([{ ...PUBLIC, magnetUrl: real }])[0]!.magnetUrl).toBe(real);
+  });
+
+  it("treats an http magnetUrl as a downloadUrl (key stripped, re-signable) when guid is no magnet", () => {
+    const r = normalizeReleases([{ ...PUBLIC, guid: "https://idx.example/t/1" }])[0]!;
+    expect(r.magnetUrl).toBeUndefined();
+    expect(r.downloadUrl).toContain("/7/download");
+    expect(r.downloadUrl).not.toContain("PROWLARRKEY");
+    const signed = new URL(new ProwlarrAdapter(cfg).signDownloadUrl(r.downloadUrl!, 7));
+    expect(signed.searchParams.get("apikey")).toBe("PROWLARRKEY");
+    expect(signed.searchParams.get("link")).toBe("bWFnbmV0");
+  });
+});
+
 describe("signDownloadUrl", () => {
   const a = new ProwlarrAdapter(cfg);
 

@@ -186,9 +186,13 @@ No \*arr manages books, so TorHQ's own intake does (see
 
 **Setup**
 
-- **qBittorrent category.** Create `torhq-books` on the Downloads page with a
-  save path **inside an approved root** (e.g. `/srv/torhq/downloads/torhq-books`).
-  If the content is outside the roots, the preview is refused and the item says so.
+- **qBittorrent category.** TorHQ creates nothing in qBittorrent: the
+  `torhq-books` category must already exist there (create it in qBittorrent's own
+  UI or API) with a save path **inside an approved root**. That path must be the
+  **same absolute path inside TorHQ's container** — TorHQ uses qBittorrent's
+  `content_path` as-is, with no path mapping (e.g. `/mnt/storage-4tb-x2/torrents/torhq-books`,
+  bind-mounted at that same path in both containers). If the content is outside
+  the roots, the preview is refused and the item says so.
 - **Books library.** On **Libraries**, add one with *kind* `books`, *target*
   Kavita, destination = the folder Kavita's Books library watches, staging on the
   same filesystem. *Move* deletes the finished download after import; *Hardlink*
@@ -245,8 +249,11 @@ land in **Audiobookshelf** (ABS). Differences from ebooks:
 3. **Library.** Libraries → add one with *kind* `audiobooks` (target is
    Audiobookshelf), destination = the ABS audiobook folder, staging on the same
    filesystem, *rescan* on.
-4. **qBittorrent category.** Create `torhq-audiobooks` on the Downloads page with
-   a save path inside an approved root.
+4. **qBittorrent category.** TorHQ creates nothing in qBittorrent: the
+   `torhq-audiobooks` category must already exist there (create it in
+   qBittorrent's own UI or API) with a save path inside an approved root that is
+   the **same absolute path inside TorHQ's container** (no path mapping;
+   `content_path` is used as-is).
 5. Prowlarr and qBittorrent are required. `GET /api/audiobooks/status` (admin)
    lists whatever is still missing.
 
