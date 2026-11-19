@@ -145,6 +145,21 @@ to be on **one filesystem** — if they are not, the import fails with an
 explanation rather than silently falling back to a copy-and-delete that would
 break the seed.
 
+**When the destination name is already taken.** An import is named after its
+source folder (or the book's title), so a different item can already be sitting
+at that name: two books with one title, or a better copy of one you hold. TorHQ
+compares the two before doing anything:
+
+- **Different files** (any file name or size differs): the import **fails** with
+  a message naming the destination, and **nothing is deleted** — the download
+  stays where it is and the library item is untouched. The preview warns about
+  this before you approve. Import under another name, or move the existing item
+  out of the library, then try again.
+- **The same files with the same sizes**: this is an import that already landed
+  (a retry after a crash, or the same download imported twice). It finishes as
+  "already present"; in move mode the now-duplicate source is deleted.
+- **The source is already gone**: the earlier attempt finished; the job succeeds.
+
 Manual-intake destinations may only target **Kavita**, **Audiobookshelf** or **Navidrome**. Jellyfin
 (movies/TV) is intentionally *not* an intake target — that content is \*arr-owned.
 TorHQ integrates with Jellyfin for health/status only.

@@ -93,6 +93,142 @@ describe("previewIntake", () => {
   });
 });
 
+describe("previewIntake when the destination name is taken", () => {
+  it("warns that the destination already exists", async () => {
+    const src = makeSource("Taken Preview");
+    const dest = libDir("libraries", "manga", "Taken Preview");
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(join(dest, "other.cbz"), "a different book");
+
+    const p = await previewIntake({ libraryKey: "kavita-manga", sourcePath: src }, [root]);
+    const text = p.warnings.join(" ");
+    expect(text).toContain("already exists");
+    expect(text).toContain(dest);
+    expect(text).toContain("nothing will be deleted");
+    // Still only a preview.
+    expect(readdirSync(src).sort()).toEqual(["ch1.cbz", "ch2.cbz"]);
+    expect(readdirSync(dest)).toEqual(["other.cbz"]);
+  });
+
+  it("says so when the destination holds the same files", async () => {
+    const src = makeSource("Same Preview");
+    const dest = libDir("libraries", "manga", "Same Preview");
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(join(dest, "ch1.cbz"), "chapter one");
+    writeFileSync(join(dest, "ch2.cbz"), "chapter two");
+
+    const p = await previewIntake({ libraryKey: "kavita-manga", sourcePath: src }, [root]);
+    const text = p.warnings.join(" ");
+    expect(text).toContain("already exists");
+    expect(text).toContain("same files");
+  });
+
+  it("gives no such warning when the destination is free", async () => {
+    const src = makeSource("Free Preview");
+    const p = await previewIntake({ libraryKey: "kavita-manga", sourcePath: src }, [root]);
+    expect(p.warnings.join(" ")).not.toContain("already exists");
+  });
+});
+
+describe("runIntake when the destination name is taken", () => {
+  /** A library item that is NOT the download: same folder name, another file. */
+  function makeOther(library: string, name: string): string {
+    const dest = libDir("libraries", library, name);
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(join(dest, "old-edition.epub"), "the edition already held");
+    return dest;
+  }
+  function makeDownload(name: string): string {
+    const src = libDir("downloads", name);
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "new-edition.epub"), "a newer, different edition");
+    return src;
+  }
+
+  it("move mode: refuses, keeps the download and leaves the library alone", async () => {
+    const dest = makeOther("manga", "Greatest Hits");
+    const src = makeDownload("Greatest Hits");
+
+    const run = runIntake("job-taken-move", { libraryKey: "kavita-manga", sourcePath: src }, [root], masterKey);
+    await expect(run).rejects.toThrow(/nothing was deleted/);
+    await expect(
+      runIntake("job-taken-move-2", { libraryKey: "kavita-manga", sourcePath: src }, [root], masterKey),
+    ).rejects.toThrow(dest);
+
+    expect(readdirSync(src)).toEqual(["new-edition.epub"]);
+    expect(statSync(join(src, "new-edition.epub")).size).toBe("a newer, different edition".length);
+    expect(readdirSync(dest)).toEqual(["old-edition.epub"]);
+    expect(readdirSync(libDir("staging", "manga"))).toEqual([]);
+  });
+
+  it("link mode: refuses instead of reporting an import", async () => {
+    const dest = makeOther("seeded", "Greatest Hits");
+    const src = makeDownload("Greatest Hits Seeded");
+
+    const run = runIntake(
+      "job-taken-link",
+      { libraryKey: "kavita-seeded", sourcePath: src, targetName: "Greatest Hits" },
+      [root], masterKey,
+    );
+    await expect(run).rejects.toThrow(/nothing was deleted/);
+
+    expect(readdirSync(src)).toEqual(["new-edition.epub"]);
+    expect(readdirSync(dest)).toEqual(["old-edition.epub"]);
+    expect(readdirSync(libDir("staging", "seeded"))).toEqual([]);
+  });
+
+  it("refuses when the names match but a size differs", async () => {
+    const dest = libDir("libraries", "manga", "Size Series");
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(join(dest, "ch1.cbz"), "chapter one");
+    writeFileSync(join(dest, "ch2.cbz"), "a longer second chapter");
+    const src = makeSource("Size Series");
+
+    await expect(runIntake("job-size", { libraryKey: "kavita-manga", sourcePath: src }, [root], masterKey))
+      .rejects.toThrow(/nothing was deleted/);
+    expect(readdirSync(src).sort()).toEqual(["ch1.cbz", "ch2.cbz"]);
+  });
+
+  it("refuses when a file sits where the download is a folder", async () => {
+    const dest = libDir("libraries", "manga", "Shape Series");
+    writeFileSync(dest, "a single file with the folder's name");
+    const src = makeSource("Shape Series");
+
+    await expect(runIntake("job-shape", { libraryKey: "kavita-manga", sourcePath: src }, [root], masterKey))
+      .rejects.toThrow(/nothing was deleted/);
+    expect(existsSync(src)).toBe(true);
+    expect(statSync(dest).isFile()).toBe(true);
+  });
+
+  it("crash retry: same files and sizes at the destination finishes cleanly", async () => {
+    // What a crash between the atomic rename and the source cleanup leaves.
+    const src = libDir("downloads", "Retry Series");
+    const dest = libDir("libraries", "manga", "Retry Series");
+    for (const base of [src, dest]) {
+      mkdirSync(join(base, "Vol 1"), { recursive: true });
+      writeFileSync(join(base, "Vol 1", "ch1.cbz"), "chapter one");
+      writeFileSync(join(base, "cover.jpg"), "cover");
+    }
+
+    const res = await runIntake("job-retry", { libraryKey: "kavita-manga", sourcePath: src }, [root], masterKey);
+    expect(res.alreadyImported).toBe(true);
+    expect(existsSync(src)).toBe(false);
+    expect(readdirSync(dest).sort()).toEqual(["Vol 1", "cover.jpg"]);
+  });
+
+  it("ignores symlinks when comparing", async () => {
+    const src = makeSource("Symlink Retry");
+    symlinkSync("../elsewhere/target.cbz", join(src, "link.cbz"));
+    const dest = libDir("libraries", "manga", "Symlink Retry");
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(join(dest, "ch1.cbz"), "chapter one");
+    writeFileSync(join(dest, "ch2.cbz"), "chapter two");
+
+    const res = await runIntake("job-symretry", { libraryKey: "kavita-manga", sourcePath: src }, [root], masterKey);
+    expect(res.alreadyImported).toBe(true);
+  });
+});
+
 describe("runIntake state machine", () => {
   it("stages then atomically imports, consuming the source and clearing staging", async () => {
     const src = makeSource("Real Series");
@@ -288,5 +424,38 @@ describe("durable queue + worker", () => {
     j = getJob(job.id)!;
     expect(j.attempts).toBe(2);
     expect(j.status).toBe("dead");
+  });
+
+  it("fails a job whose destination name is taken by something else, and never deletes the download", async () => {
+    const dest = libDir("libraries", "manga", "Queue Clash");
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(join(dest, "old-edition.epub"), "the edition already held");
+    const src = libDir("downloads", "Queue Clash");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "new-edition.epub"), "a newer, different edition");
+
+    const job = enqueue({
+      type: "manual_intake",
+      payload: { libraryKey: "kavita-manga", sourcePath: src },
+      maxAttempts: 2,
+    });
+    const worker = new Worker([root], masterKey);
+
+    await worker.tick(); // attempt 1 → back to queued
+    let j = getJob(job.id)!;
+    expect(j.attempts).toBe(1);
+    expect(j.status).toBe("queued");
+    expect(j.lastError).toContain("nothing was deleted");
+    expect(j.lastError).toContain(dest);
+    expect(readdirSync(src)).toEqual(["new-edition.epub"]);
+
+    getDb().update(jobs).set({ nextRunAt: Date.now() - 1 }).where(eq(jobs.id, job.id)).run();
+    await worker.tick(); // attempt 2 → dead
+    j = getJob(job.id)!;
+    expect(j.attempts).toBe(2);
+    expect(j.status).toBe("dead");
+    expect(j.lastError).toContain("nothing was deleted");
+    expect(readdirSync(src)).toEqual(["new-edition.epub"]);
+    expect(readdirSync(dest)).toEqual(["old-edition.epub"]);
   });
 });
