@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -85,5 +85,41 @@ describe("safeFilename", () => {
   });
   it("keeps a normal filename", () => {
     expect(safeFilename("Artist - Album (2024).flac")).toBe("Artist - Album (2024).flac");
+  });
+});
+
+describe("not-yet-existing paths under a symlinked parent", () => {
+  const mk = (): { link: string } => {
+    const link = join(root, "link-new");
+    symlinkSync(outside, link);
+    return { link };
+  };
+  it("rejects a new path under a symlink that leaves the roots", () => {
+    const { link } = mk();
+    try {
+      expect(() => safeResolve(join(link, "new"), [root], { mustExist: false })).toThrow(PathValidationError);
+      try { safeResolve(join(link, "new"), [root], { mustExist: false }); } catch (e) { expect((e as PathValidationError).code).toBe("SYMLINK_ESCAPE"); }
+    } finally { rmSync(link); }
+  });
+  it("rejects it with several missing levels", () => {
+    const { link } = mk();
+    try {
+      let code = "";
+      try { safeResolve(join(link, "a", "b", "c"), [root], { mustExist: false }); } catch (e) { code = (e as PathValidationError).code; }
+      expect(code).toBe("SYMLINK_ESCAPE");
+    } finally { rmSync(link); }
+  });
+  it("returns the real path when the symlink stays inside the roots", () => {
+    const real = join(root, "real-dir");
+    mkdirSync(real, { recursive: true });
+    const inlink = join(root, "inlink");
+    symlinkSync(real, inlink);
+    try {
+      expect(safeResolve(join(inlink, "new"), [root], { mustExist: false })).toBe(join(realpathSync(real), "new"));
+    } finally { rmSync(inlink); }
+  });
+  it("still returns a new path under a real folder", () => {
+    const dest = join(root, "libraries", "music", "another-album");
+    expect(safeResolve(dest, [root], { mustExist: false })).toBe(join(realpathSync(root), "libraries", "music", "another-album"));
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
@@ -164,6 +164,32 @@ describe("intake path validation via API", () => {
         destPath: "/etc/evil", stagingPath: "/etc/evil" },
     });
     expect(r.statusCode).toBe(400);
+  });
+});
+
+describe("library folders behind a symlink", () => {
+  it("rejects a destPath or stagingPath that reaches outside the roots through a symlink", async () => {
+    const r0 = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "admin", password: "supersecret1" } });
+    const csrf = r0.json().csrfToken;
+    const cookie = r0.cookies[0].name + "=" + r0.cookies[0].value;
+    const outside = mkdtempSync(join(tmpdir(), "torhq-outside-"));
+    try {
+      mkdirSync(join(dataDir, "lib"), { recursive: true });
+      symlinkSync(outside, join(dataDir, "lib", "portal"));
+      const good = join(dataDir, "libraries", "ok");
+      const bad = join(dataDir, "lib", "portal", "newdir");
+      for (const [key, destPath, stagingPath] of [["sl-dest", bad, join(dataDir, "staging", "ok")], ["sl-stage", good, bad]]) {
+        const r = await app.inject({
+          method: "POST", url: "/api/libraries", headers: { cookie, "x-csrf-token": csrf },
+          payload: { key, label: key, kind: "books", targetService: "kavita", destPath, stagingPath },
+        });
+        expect(r.statusCode).toBe(400);
+      }
+      const list = await app.inject({ method: "GET", url: "/api/libraries", headers: { cookie } });
+      const keys = list.json().libraries.map((l: any) => l.key);
+      expect(keys).not.toContain("sl-dest");
+      expect(keys).not.toContain("sl-stage");
+    } finally { rmSync(outside, { recursive: true, force: true }); }
   });
 });
 

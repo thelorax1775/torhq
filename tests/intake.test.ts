@@ -305,13 +305,12 @@ describe("hardlink import mode", () => {
     expect(b.nlink).toBe(2);
   });
 
-  it("recreates symlinks verbatim instead of linking through them", async () => {
+  it("skips symlinks instead of recreating them", async () => {
     const src = makeSource("Symlink Series");
     symlinkSync("../elsewhere/target.cbz", join(src, "link.cbz"));
     await runIntake("job-symlink", { libraryKey: "kavita-seeded", sourcePath: src }, [root], masterKey);
-    const imported = libDir("libraries", "seeded", "Symlink Series", "link.cbz");
-    expect(lstatSync(imported).isSymbolicLink()).toBe(true);
-    expect(readlinkSync(imported)).toBe("../elsewhere/target.cbz");
+    const dest = libDir("libraries", "seeded", "Symlink Series");
+    expect(readdirSync(dest).sort()).toEqual(["ch1.cbz", "ch2.cbz"]);
   });
 
   it("does not delete the source on the idempotent already-imported path", async () => {
@@ -457,5 +456,68 @@ describe("durable queue + worker", () => {
     expect(j.lastError).toContain("nothing was deleted");
     expect(readdirSync(src)).toEqual(["new-edition.epub"]);
     expect(readdirSync(dest)).toEqual(["old-edition.epub"]);
+  });
+});
+
+describe("symlinks are never imported", () => {
+  let outside: string;
+  beforeAll(() => { outside = mkdtempSync(join(tmpdir(), "torhq-outside-")); writeFileSync(join(outside, "secret.txt"), "s"); });
+  afterAll(() => rmSync(outside, { recursive: true, force: true }));
+
+  function makeTree(name: string): string {
+    const src = libDir("downloads", name);
+    mkdirSync(join(src, "Vol 1", "extras"), { recursive: true });
+    writeFileSync(join(src, "ch1.cbz"), "one");
+    writeFileSync(join(src, "Vol 1", "ch2.cbz"), "two");
+    writeFileSync(join(src, "Vol 1", "extras", "cover.jpg"), "cover");
+    symlinkSync(outside, join(src, "escape"));
+    symlinkSync("../ch1.cbz", join(src, "Vol 1", "sibling.cbz"));
+    return src;
+  }
+  function walk(dir: string): { files: string[]; links: string[] } {
+    const files: string[] = [], links: string[] = [];
+    const rec = (d: string, rel: string) => {
+      for (const n of readdirSync(d)) {
+        const p = join(d, n), r = rel ? `${rel}/${n}` : n;
+        const st = lstatSync(p);
+        if (st.isSymbolicLink()) links.push(r);
+        else if (st.isDirectory()) { files.push(`${r}/`); rec(p, r); }
+        else files.push(r);
+      }
+    };
+    rec(dir, "");
+    return { files: files.sort(), links };
+  }
+  const expected = ["Vol 1/", "Vol 1/ch2.cbz", "Vol 1/extras/", "Vol 1/extras/cover.jpg", "ch1.cbz"];
+
+  for (const [mode, lib] of [["move", "kavita-manga"], ["link", "kavita-seeded"]] as const) {
+    it(`${mode} mode imports every regular file and no symlink at any depth`, async () => {
+      const name = `Links ${mode}`;
+      const src = makeTree(name);
+      const res = await runIntake(`job-links-${mode}`, { libraryKey: lib, sourcePath: src }, [root], masterKey);
+      const dest = libDir("libraries", lib === "kavita-manga" ? "manga" : "seeded", name);
+      expect(res.destPath).toBe(dest);
+      const got = walk(dest);
+      expect(got.links).toEqual([]);
+      expect(got.files).toEqual(expected);
+    });
+  }
+
+  it("the preview names every symlink, nested ones with their relative path", async () => {
+    const src = makeTree("Links preview");
+    const p = await previewIntake({ libraryKey: "kavita-manga", sourcePath: src }, [root]);
+    const skips = p.warnings.filter((w) => w.startsWith("Skipping symlink:")).sort();
+    expect(skips).toEqual(["Skipping symlink: Vol 1/sibling.cbz", "Skipping symlink: escape"]);
+    expect(p.entries.map((e) => e.name).sort()).toEqual(["Vol 1", "ch1.cbz"]);
+  });
+
+  it("the preview caps the symlink list at 20 and says how many more", async () => {
+    const src = libDir("downloads", "Many links");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "a.cbz"), "a");
+    for (let i = 0; i < 25; i++) symlinkSync(outside, join(src, `l${String(i).padStart(2, "0")}`));
+    const p = await previewIntake({ libraryKey: "kavita-manga", sourcePath: src }, [root]);
+    expect(p.warnings.filter((w) => w.startsWith("Skipping symlink:"))).toHaveLength(20);
+    expect(p.warnings.some((w) => w.includes("and 5 more"))).toBe(true);
   });
 });
