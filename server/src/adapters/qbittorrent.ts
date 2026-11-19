@@ -70,7 +70,7 @@ export class QbittorrentAdapter implements ServiceAdapter {
     const start = Date.now();
     try {
       const v = await this.authed<string>("/api/v2/app/version");
-      return { healthy: true, version: String(v), latencyMs: Date.now() - start };
+      return { healthy: true, version: String(v).replace(/^v/i, ""), latencyMs: Date.now() - start };
     } catch (e) {
       return { healthy: false, detail: (e as Error).message, latencyMs: Date.now() - start };
     }

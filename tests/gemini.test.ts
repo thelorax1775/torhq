@@ -59,6 +59,12 @@ describe("GeminiAdapter wiring", () => {
 });
 
 describe("GeminiAdapter.health", () => {
+  it("gives the model-list probe a short timeout so a dead provider cannot stall the health call", async () => {
+    httpJson.mockResolvedValueOnce({ models: [] });
+    await new GeminiAdapter(cfg).health();
+    expect(httpJson.mock.calls[0][2].timeoutMs).toBeLessThanOrEqual(8_000);
+  });
+
   it("names a configured model the key cannot actually reach", async () => {
     // Otherwise this is a cheerful "healthy" that 404s on the first real call.
     httpJson.mockResolvedValueOnce({

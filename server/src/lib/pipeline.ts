@@ -115,7 +115,7 @@ function arrChecks(arr: ArrSnapshot, qb: QbSnapshot, now: number): PipelineCheck
   checks.push(categoryCheck(arr, name, qb, client));
   checks.push(completedHandlingCheck(arr, name));
   checks.push(rootFolderCheck(arr, name, qb));
-  checks.push(savePathVisibleCheck(arr, name, qb));
+  checks.push(savePathVisibleCheck(arr, name, qb, client));
   checks.push(stuckImportCheck(arr, name, qb, now));
   return checks;
 }
@@ -283,9 +283,11 @@ function rootFolderCheck(arr: ArrSnapshot, name: string, qb: QbSnapshot): Pipeli
  * a new category and must not be reported as a mount failure. Only a parent the
  * *arr cannot see means the mount is genuinely absent.
  */
-function savePathVisibleCheck(arr: ArrSnapshot, name: string, qb: QbSnapshot): PipelineCheck {
+function savePathVisibleCheck(
+  arr: ArrSnapshot, name: string, qb: QbSnapshot, client: ArrDownloadClient | undefined,
+): PipelineCheck {
   const base = { id: `${arr.service}-sees-save-path`, label: `${name} can see qBittorrent's download directory` };
-  const savePaths = qbSavePaths(qb);
+  const savePaths = arrSavePaths(arr, qb, client);
   if (savePaths.length === 0) {
     return {
       ...base, ok: false, severity: "info",
@@ -301,7 +303,10 @@ function savePathVisibleCheck(arr: ArrSnapshot, name: string, qb: QbSnapshot): P
     };
   }
 
-  const unmounted = arr.visiblePaths.filter((v) => !v.visible && !v.parentVisible);
+  // The route probes every directory qBittorrent writes into; only the ones this
+  // *arr imports from are its business (TorHQ's own book categories are not).
+  const visiblePaths = arr.visiblePaths.filter((v) => savePaths.some((p) => normalizePath(p) === normalizePath(v.path)));
+  const unmounted = visiblePaths.filter((v) => !v.visible && !v.parentVisible);
   if (unmounted.length) {
     return {
       ...base, ok: false, severity: "error",
@@ -313,8 +318,8 @@ function savePathVisibleCheck(arr: ArrSnapshot, name: string, qb: QbSnapshot): P
     };
   }
 
-  const pending = arr.visiblePaths.filter((v) => !v.visible);
-  const mounted = arr.visiblePaths.filter((v) => v.visible).map((v) => v.path);
+  const pending = visiblePaths.filter((v) => !v.visible);
+  const mounted = visiblePaths.filter((v) => v.visible).map((v) => v.path);
   if (pending.length) {
     return {
       ...base, ok: true, severity: "info",
@@ -369,6 +374,19 @@ function itemStartedAt(item: ArrQueueItem, qb: QbSnapshot): number | null {
   if (!hash) return null;
   const torrent = qb.torrents?.find((t) => t.hash.toLowerCase() === hash);
   return torrent?.addedOn ? torrent.addedOn * 1000 : null;
+}
+
+/**
+ * The directories this *arr actually imports from: the save path of the category
+ * its own download client uses, or qBittorrent's default save path when it sets
+ * no category (or the category has no path of its own). Never the other
+ * categories — torhq-books and friends belong to TorHQ, not to any *arr.
+ */
+function arrSavePaths(arr: ArrSnapshot, qb: QbSnapshot, client: ArrDownloadClient | undefined): string[] {
+  const category = clientCategory(arr.service, client);
+  const own = category ? qb.categories?.[category]?.savePath : undefined;
+  const path = own && own.trim() ? own : qb.defaultSavePath;
+  return path && path.trim() ? [path] : [];
 }
 
 /** Every directory qBittorrent may write downloads into. */

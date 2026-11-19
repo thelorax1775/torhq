@@ -137,8 +137,8 @@ function healthTone(h: HealthResult | undefined): Tone {
   if (h.healthy) return "ok";
   return h.detail === "not configured" ? "neutral" : "err";
 }
-function healthLabel(h: HealthResult | undefined): string {
-  if (!h) return "Unknown";
+function healthLabel(h: HealthResult | undefined, checking = false): string {
+  if (!h) return checking ? "Checking…" : "Unknown";
   if (h.healthy) return h.version ? `Healthy · v${h.version}` : "Healthy";
   return h.detail ?? "Unhealthy";
 }
@@ -242,6 +242,9 @@ async function testService(body: ServiceInput): Promise<HealthResult> {
   }
 }
 
+// Stable identity while loading: the form-reseed effect below depends on it.
+const NO_SERVICES: SafeService[] = [];
+
 export function Services() {
   const servicesQ = usePolled<ServicesResponse>("/api/services");
   const healthQ = usePolled<HealthResponse>("/api/status/health", 20000);
@@ -258,9 +261,11 @@ export function Services() {
     { invalidates: ["/api/services", "/api/status/health"] },
   );
 
-  const services = servicesQ.data?.services ?? [];
+  const services = servicesQ.data?.services ?? NO_SERVICES;
   const kinds = servicesQ.data?.kinds ?? [];
   const health = healthQ.data?.health ?? {};
+  // No answer yet and no failure either: the (slow) health call is still running.
+  const awaitingHealth = healthQ.data === null && healthQ.error === null;
   const current = services.find((s) => s.kind === sel);
   const fields = EXTRA_FIELDS[sel] ?? [];
 
@@ -299,15 +304,17 @@ export function Services() {
   }
 
   const counts = useMemo(() => {
-    let healthy = 0, attention = 0, unset = 0;
+    let healthy = 0, attention = 0, unset = 0, checking = 0;
     for (const k of kinds) {
       const h = health[k];
-      if (!h || h.detail === "not configured") unset++;
+      // No result yet for a service that has a connection saved = still checking.
+      if (!h && awaitingHealth && services.some((s) => s.kind === k)) checking++;
+      else if (!h || h.detail === "not configured") unset++;
       else if (h.healthy) healthy++;
       else attention++;
     }
-    return { healthy, attention, unset };
-  }, [kinds, health]);
+    return { healthy, attention, unset, checking };
+  }, [kinds, health, services, awaitingHealth]);
 
   function edit(kind: string) {
     setSel(kind);
@@ -331,6 +338,7 @@ export function Services() {
             <div className="stat-grid">
               <Badge tone="ok" title="Reachable on the last health check">{counts.healthy} healthy</Badge>
               <Badge tone={counts.attention ? "err" : "neutral"} title="Configured but the last check failed">{counts.attention} need attention</Badge>
+              {counts.checking > 0 && <Badge tone="neutral" title="Waiting for the health check to answer">{counts.checking} checking…</Badge>}
               <Badge tone="neutral" title="No connection saved yet">{counts.unset} not set up</Badge>
             </div>
 
@@ -370,7 +378,7 @@ export function Services() {
                               ? <span className="dim small">not required</span>
                               : <Badge tone={svc?.secretMask ? "ok" : "warn"}>{svc?.secretMask ? "configured" : "not set"}</Badge>}
                           </td>
-                          <td className="nowrap"><Badge tone={tone} title={h?.detail}>{healthLabel(h)}</Badge></td>
+                          <td className="nowrap"><Badge tone={tone} title={h?.detail}>{healthLabel(h, awaitingHealth && !!svc)}</Badge></td>
                           <td className="shrink">
                             <Button size="sm" variant="ghost" onClick={() => edit(kind)}>Edit</Button>
                           </td>
