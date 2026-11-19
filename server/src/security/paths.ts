@@ -1,5 +1,5 @@
 import { realpathSync, lstatSync } from "node:fs";
-import { resolve, sep, isAbsolute } from "node:path";
+import { resolve, sep, isAbsolute, join, dirname, basename } from "node:path";
 
 export class PathValidationError extends Error {
   constructor(message: string, readonly code: string) {
@@ -83,8 +83,36 @@ export function safeResolve(
     if (mustExist) {
       throw new PathValidationError(`Path does not exist: ${lexical}`, "NOT_FOUND");
     }
-    // Not-yet-created destination: trust the lexical (already contained) path.
-    return lexical;
+    // Not-yet-created destination: resolve the deepest ancestor that exists and
+    // require THAT real folder to be approved, so a symlinked parent cannot
+    // lead a new path outside the roots.
+    let ancestor = lexical;
+    const rest: string[] = [];
+    for (;;) {
+      let present = true;
+      try { lstatSync(ancestor); } catch { present = false; }
+      if (present) {
+        try {
+          const realAncestor = realpathSync(ancestor);
+          if (!isWithinApprovedRoots(realAncestor, approvedRoots)) {
+            throw new PathValidationError(
+              `Symlink target escapes approved roots: ${realAncestor}`,
+              "SYMLINK_ESCAPE",
+            );
+          }
+          return rest.length ? join(realAncestor, ...rest) : realAncestor;
+        } catch (e) {
+          if (e instanceof PathValidationError) throw e;
+          // Present but unresolvable (a dangling symlink): writing through it
+          // would land somewhere unchecked.
+          throw new PathValidationError(`Broken symlink in path: ${ancestor}`, "SYMLINK_ESCAPE");
+        }
+      }
+      const parent = dirname(ancestor);
+      if (parent === ancestor) return lexical;
+      rest.unshift(basename(ancestor));
+      ancestor = parent;
+    }
   }
 
   // Step 3: the symlink-resolved real path must ALSO be contained.
