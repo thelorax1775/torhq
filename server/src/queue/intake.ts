@@ -1,5 +1,6 @@
-import { promises as fs, constants as FS } from "node:fs";
+import { promises as fs } from "node:fs";
 import { join, basename } from "node:path";
+import type { Stats } from "node:fs";
 import type { Buffer } from "node:buffer";
 import { getLibrary } from "../config/store.js";
 import { getAdapter } from "../adapters/registry.js";
@@ -129,11 +130,56 @@ export async function previewIntake(
     entries.push({ name: basename(src), size: stat.size, isDir: false });
     totalBytes = stat.size;
   }
+  if (src !== destPath && await exists(destPath)) {
+    warnings.push(
+      await sameContent(src, destPath)
+        ? `The destination already exists and holds the same files: ${destPath}. ` +
+          `Nothing new will be imported` +
+          (mode === "move" ? "; the source will be deleted as a duplicate." : ".")
+        : `The destination already exists and holds different files: ${destPath}. ` +
+          `This import will fail and nothing will be deleted. Choose another name, or ` +
+          `move the existing item out of the library first.`,
+    );
+  }
   return { libraryKey: lib.key, sourcePath: src, destPath, importMode: mode, entries, totalBytes, warnings };
 }
 
+/** True when anything is at `path`, including a symlink whose target is gone. */
 async function exists(path: string): Promise<boolean> {
-  try { await fs.access(path, FS.F_OK); return true; } catch { return false; }
+  try { await fs.lstat(path); return true; } catch { return false; }
+}
+
+/**
+ * Every regular file under `path` mapped to its size, keyed by its path
+ * relative to `path` (the empty string when `path` is itself a file).
+ * Symlinks are ignored; directories contribute only the files inside them.
+ */
+async function fileSizes(path: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const walk = async (abs: string, rel: string): Promise<void> => {
+    const st: Stats = await fs.lstat(abs);
+    if (st.isSymbolicLink()) return;
+    if (st.isDirectory()) {
+      for (const name of await fs.readdir(abs)) await walk(join(abs, name), rel ? `${rel}/${name}` : name);
+      return;
+    }
+    out.set(rel, st.size);
+  };
+  await walk(path, "");
+  return out;
+}
+
+/**
+ * Does the destination hold what the source holds? Same relative file paths,
+ * same sizes. This is what tells a retry of an import that already landed (safe
+ * to finish) from a different item that merely has the same name (must not be
+ * treated as imported, and its source must not be deleted).
+ */
+async function sameContent(source: string, dest: string): Promise<boolean> {
+  const [a, b] = await Promise.all([fileSizes(source), fileSizes(dest)]);
+  if (a.size !== b.size) return false;
+  for (const [rel, size] of a) if (b.get(rel) !== size) return false;
+  return true;
 }
 
 /**
@@ -195,6 +241,7 @@ function explainLinkFailure(err: unknown, source: string, stagingBase: string): 
  * Execute an intake job as an explicit, restart-safe state machine:
  *
  *   validate → [already imported? → rescan → done]
+ *            → [name taken by different content? → fail, delete nothing]
  *            → stage  (copy or hardlink source into a per-job staging workdir)
  *            → commit (ATOMIC rename staging → destination; the only reveal
  *                      to the media scanner)
@@ -202,8 +249,10 @@ function explainLinkFailure(err: unknown, source: string, stagingBase: string): 
  *            → rescan (best-effort; import already succeeded)
  *
  * Properties:
- *  - Idempotent: if the destination already exists it succeeds without
- *    duplicating (safe to retry after a crash between commit and completion).
+ *  - Idempotent: if the destination already exists and holds the same files as
+ *    the source (or the source is gone) it succeeds without duplicating (safe
+ *    to retry after a crash between commit and completion). A destination that
+ *    holds different files fails the job and nothing is deleted.
  *  - Atomic reveal: partial data only ever lives in the hidden staging workdir,
  *    never inside the live library directory, so a scanner never sees a
  *    half-imported item.
@@ -224,7 +273,21 @@ export async function runIntake(
 
   // Idempotency: destination already present → treat as imported. Makes a retry
   // after a crash between commit and completion a no-op instead of a duplicate.
+  //
+  // But only when it really is this import. A name alone proves nothing: two
+  // books share a title, a better copy replaces a worse one. While the source is
+  // still here to compare against, the destination must hold the same files, or
+  // the job fails and deletes nothing. With the source gone there is nothing
+  // left to lose, so that case stays a success.
   if (await exists(destPath)) {
+    if (source && source !== destPath && !(await sameContent(source, destPath))) {
+      const message =
+        `Cannot import ${finalName}: the library already has a different item at ${destPath}. ` +
+        `The import was stopped and nothing was deleted; the download is still at ${source}. ` +
+        `Import it under another name, or move the existing item out of the library first.`;
+      logActivity({ kind: "failed", jobId, service: lib.targetService, message });
+      throw new Error(message);
+    }
     logActivity({ kind: "info", jobId, service: lib.targetService, message: `Destination already present, skipping import: ${finalName}` });
     if (mode === "move" && source && source !== destPath) {
       await fs.rm(source, { recursive: true, force: true }).catch(() => {});
