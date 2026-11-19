@@ -55,12 +55,12 @@ export function jobRoutes(app: FastifyInstance, ctx: AppContext): void {
     return { ok: true, jobId: job.id, status: job.status };
   });
 
-  app.get("/api/jobs", { preHandler: app.requireAuth }, async (req) => {
+  app.get("/api/jobs", { preHandler: [app.requireAuth, app.requireAdmin] }, async (req) => {
     const { status } = JobListQuery.parse(req.query ?? {});
     return { jobs: listJobs(status) };
   });
 
-  app.get("/api/jobs/:id", { preHandler: app.requireAuth }, async (req, reply) => {
+  app.get("/api/jobs/:id", { preHandler: [app.requireAuth, app.requireAdmin] }, async (req, reply) => {
     const { id } = IdParam.parse(req.params);
     const job = getJob(id);
     if (!job) return reply.code(404).send({ error: "not found" });

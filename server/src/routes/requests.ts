@@ -31,14 +31,16 @@ export function requestRoutes(app: FastifyInstance, ctx: AppContext): void {
 
   for (const [route, kind] of Object.entries(ARR_KIND) as Array<[Route, string]>) {
     // Profiles / root folders (and Lidarr metadata profiles) for the form.
-    app.get(`/api/requests/${route}/options`, { preHandler: app.requireAuth }, async (_req, reply) => {
+    app.get(`/api/requests/${route}/options`, { preHandler: app.requireAuth }, async (req, reply) => {
       const a = getAdapter(kind, ctx.masterKey) as ArrAdapter | null;
       if (!a) return reply.code(409).send({ error: `${kind} not configured` });
       try {
+        const isAdmin = req.session!.role === "admin";
         const [profiles, roots, metadataProfiles] = await Promise.all([
           a.qualityProfiles(), a.rootFolders(), a.metadataProfiles(),
         ]);
-        return { profiles, roots, metadataProfiles };
+        // Root folders are server paths: admins only.
+        return { profiles, roots: isAdmin ? roots : [], metadataProfiles };
       } catch (e) {
         return reply.code(502).send({ error: (e as Error).message });
       }
@@ -61,7 +63,16 @@ export function requestRoutes(app: FastifyInstance, ctx: AppContext): void {
       const a = getAdapter(kind, ctx.masterKey) as ArrAdapter | null;
       if (!a) return reply.code(409).send({ error: `${kind} not configured` });
       const body = AddRequest.parse(req.body);
+      if (body.rootFolderPath !== undefined && req.session!.role !== "admin") {
+        return reply.code(400).send({ error: "Members cannot choose the folder; leave rootFolderPath out" });
+      }
       try {
+        if (body.rootFolderPath !== undefined) {
+          const roots = await a.rootFolders();
+          if (!roots.some((r) => r.path === body.rootFolderPath)) {
+            return reply.code(400).send({ error: `rootFolderPath is not one of ${kind}'s root folders` });
+          }
+        }
         const saved = (getServiceDecrypted(kind, ctx.masterKey)?.extra ?? {}) as Record<string, unknown>;
         const num = (v: unknown) => (typeof v === "number" ? v : undefined);
         const rootFolderPath = body.rootFolderPath

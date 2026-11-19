@@ -96,6 +96,10 @@ and categories stay on the fixed allowlist.
 
 ### `GET /api/downloads`
 
+Admin gets the full response below. A **member** gets the same shape with
+`torrents: []` and `categories: {}` and the real `transfer` totals (the layout's
+speed readout), so no save/content path leaves the server.
+
 ```jsonc
 { "torrents": [{ "hash": "…", "name": "…", "category": "radarr", "state": "downloading",
                  "progress": 0.42, "dlspeed": 1048576, "upspeed": 0, "size": 8589934592,
@@ -140,7 +144,14 @@ download client and, for admins, the failing pipeline checks. Read-only.
 `?limit` is 1-500 (400 otherwise). `GET /api/activity/log` is the raw audit log
 that used to live at this path; it is admin-only.
 
+### `GET /api/jobs`, `GET /api/jobs/:id`
+
+**Admin only** (`requireAdmin`; 403 for a member): jobs carry `sourcePath`,
+`payloadJson` and `lastError`. `POST /api/jobs/:id/retry` was already admin-only.
+
 ### `GET /api/queue`
+
+**Admin only** (`requireAdmin`; 403 for a member): items carry `outputPath`.
 
 The *arr side of the same pipeline — merged Radarr/Sonarr/Lidarr queues:
 
@@ -273,8 +284,14 @@ Errors: 400 bad id for the kind, 404 not found, 409 owner app not configured,
   `MoviesSearch` / `SeriesSearch` / `ArtistSearch` command: the *arr searches
   and grabs by itself. TorHQ never lists or picks a release here. 409 when the
   service is not configured, 502 when the *arr refuses.
-- `POST /api/requests/:route` (member allowed) — `rootFolderPath` and
-  `qualityProfileId` are now **optional**. Omitted, the saved defaults apply,
+- `GET /api/requests/:route/options` — members get `profiles` and
+  `metadataProfiles`; `roots` is `[]` for a member, the *arr's root folders for an
+  admin.
+- `POST /api/requests/:route` (member allowed) — a **member** who sends
+  `rootFolderPath` gets 400 ("Members cannot choose the folder") and nothing
+  reaches the *arr. An **admin's** `rootFolderPath` must equal one of the *arr's
+  `rootFolders()` paths, else 400 and nothing is added. `rootFolderPath` and
+  `qualityProfileId` are **optional**. Omitted, the saved defaults apply,
   then the *arr's first root folder/quality profile (and first metadata profile
   for Lidarr), so a member never has to know a server path.
 

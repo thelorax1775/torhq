@@ -97,7 +97,7 @@ describe("user management", () => {
     const samId = (await app.inject({ method: "GET", url: "/api/users", headers: { cookie: adminCookie } }))
       .json().users.find((u: any) => u.username === "sam").id;
 
-    const before = await app.inject({ method: "GET", url: "/api/jobs", headers: { cookie: samCookie } });
+    const before = await app.inject({ method: "GET", url: "/api/activity", headers: { cookie: samCookie } });
     expect(before.statusCode).toBe(200);
 
     const reset = await app.inject({
@@ -107,7 +107,7 @@ describe("user management", () => {
     });
     expect(reset.statusCode).toBe(200);
 
-    const after = await app.inject({ method: "GET", url: "/api/jobs", headers: { cookie: samCookie } });
+    const after = await app.inject({ method: "GET", url: "/api/activity", headers: { cookie: samCookie } });
     expect(after.statusCode).toBe(401); // old session is gone
 
     const relogin = await app.inject({ method: "POST", url: "/api/auth/login", payload: { username: "sam", password: "newfriendpass1" } });
@@ -130,7 +130,7 @@ describe("user management", () => {
     });
     expect(del.statusCode).toBe(200);
 
-    const after = await app.inject({ method: "GET", url: "/api/jobs", headers: { cookie: tempCookie } });
+    const after = await app.inject({ method: "GET", url: "/api/activity", headers: { cookie: tempCookie } });
     expect(after.statusCode).toBe(401);
 
     const again = await app.inject({
