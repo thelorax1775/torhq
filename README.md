@@ -127,7 +127,10 @@ is explicit and previewed end-to-end:
 
 1. You (or the slskd webhook) name a **source path** inside an approved root.
 2. TorHQ builds a **dry-run preview**: it validates containment, rejects symlink
-   escapes, and lists exactly what will be imported.
+   escapes, and lists exactly what will be imported. Symlinks inside the source are
+   never imported: the preview names each one ("Skipping symlink: <relative path>",
+   up to 20, then "and N more") and the import neither copies nor recreates them,
+   in move and link mode alike.
 3. On approval, a durable job **atomically imports** the content into the
    library's destination via a same-filesystem staging directory, then requests a
    **rescan** of the target service (Kavita or Navidrome).
@@ -166,7 +169,9 @@ TorHQ integrates with Jellyfin for health/status only.
 
 Every path is checked with defense-in-depth containment (lexical `..` collapse,
 prefix-aliasing-safe root check, and `realpath` symlink-escape rejection) against
-`TORHQ_APPROVED_ROOTS`. There are no destructive media operations beyond this one
+`TORHQ_APPROVED_ROOTS`. A destination that does not exist yet is checked through
+its nearest existing parent: if that parent is a symlink leading outside the
+roots, the path is rejected. There are no destructive media operations beyond this one
 previewed, approved import.
 
 ---
@@ -1079,7 +1084,10 @@ systemctl start torhq
 - **Rate limiting.** Global limiter plus a tighter limiter on auth and webhook routes.
 - **Path containment.** Every filesystem path is validated against
   `TORHQ_APPROVED_ROOTS` with lexical traversal collapse, prefix-aliasing-safe
-  prefix checks, and `realpath` symlink-escape rejection.
+  prefix checks, and `realpath` symlink-escape rejection. A not-yet-created
+  destination is resolved through its deepest existing parent, so a symlinked
+  parent cannot lead outside the roots. Symlinks in an import source are skipped,
+  never copied or recreated.
 - **Webhook auth.** `/webhooks/slskd` requires a shared token compared in
   constant time.
 - **Least privilege deployment.** Runs as an unprivileged user under a hardened

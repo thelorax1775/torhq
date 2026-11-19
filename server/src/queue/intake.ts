@@ -122,10 +122,13 @@ export async function previewIntake(
     for (const name of await fs.readdir(src)) {
       const p = join(src, name);
       const st = await fs.lstat(p);
-      if (st.isSymbolicLink()) { warnings.push(`Skipping symlink: ${name}`); continue; }
+      if (st.isSymbolicLink()) continue; // reported below with the nested ones
       entries.push({ name, size: st.size, isDir: st.isDirectory() });
       totalBytes += st.size;
     }
+    const links = await findSymlinks(src);
+    for (const rel of links.slice(0, 20)) warnings.push(`Skipping symlink: ${rel}`);
+    if (links.length > 20) warnings.push(`and ${links.length - 20} more symlinks skipped`);
   } else {
     entries.push({ name: basename(src), size: stat.size, isDir: false });
     totalBytes = stat.size;
@@ -142,6 +145,22 @@ export async function previewIntake(
     );
   }
   return { libraryKey: lib.key, sourcePath: src, destPath, importMode: mode, entries, totalBytes, warnings };
+}
+
+/** Relative paths of every symlink under `root`, at any depth (never followed). */
+async function findSymlinks(root: string): Promise<string[]> {
+  const out: string[] = [];
+  const walk = async (abs: string, rel: string): Promise<void> => {
+    for (const name of (await fs.readdir(abs)).sort()) {
+      const p = join(abs, name);
+      const r = rel ? `${rel}/${name}` : name;
+      const st = await fs.lstat(p);
+      if (st.isSymbolicLink()) out.push(r);
+      else if (st.isDirectory()) await walk(p, r);
+    }
+  };
+  await walk(root, "");
+  return out;
 }
 
 /** True when anything is at `path`, including a symlink whose target is gone. */
@@ -185,7 +204,7 @@ async function sameContent(source: string, dest: string): Promise<boolean> {
 /**
  * Recreate `src` at `dest` as a tree of hardlinks: directories are made fresh,
  * regular files get a second name pointing at the same inode, symlinks are
- * recreated verbatim rather than followed.
+ * skipped (never followed, never recreated).
  *
  * No file content is read or written, so this is effectively instantaneous and
  * uses no additional space — the same trick the *arr use to import a completed
@@ -193,10 +212,7 @@ async function sameContent(source: string, dest: string): Promise<boolean> {
  */
 async function linkTree(src: string, dest: string): Promise<void> {
   const st = await fs.lstat(src);
-  if (st.isSymbolicLink()) {
-    await fs.symlink(await fs.readlink(src), dest);
-    return;
-  }
+  if (st.isSymbolicLink()) return; // symlinks are never imported
   if (st.isDirectory()) {
     await fs.mkdir(dest, { recursive: true });
     for (const name of await fs.readdir(src)) await linkTree(join(src, name), join(dest, name));
@@ -324,8 +340,11 @@ export async function runIntake(
       }
     } else {
       // Copy (not move) so the source survives until the atomic commit succeeds,
-      // which keeps retries safe. Symlinks are preserved verbatim, not followed.
-      await fs.cp(source, staged, { recursive: true, verbatimSymlinks: true });
+      // which keeps retries safe. Symlinks are skipped, never copied or followed.
+      await fs.cp(source, staged, {
+        recursive: true,
+        filter: async (from) => !(await fs.lstat(from)).isSymbolicLink(),
+      });
     }
 
     // --- commit ------------------------------------------------------------
