@@ -65,6 +65,8 @@ describe("request attribution", () => {
     httpJson.mockImplementation(async (...args: any[]) => {
       const [, path, opts] = args;
       if (String(path).endsWith("/lookup")) return [{ title: "Dune", year: 2021, tmdbId: 438631 }];
+      if (String(path).endsWith("/rootfolder")) return [{ id: 1, path: "/movies" }];
+      if (String(path).endsWith("/qualityprofile")) return [{ id: 1, name: "Any" }];
       if (opts?.method === "POST") return { id: 42, title: "Dune" };
       return {};
     });
@@ -72,7 +74,7 @@ describe("request attribution", () => {
     const r = await app.inject({
       method: "POST", url: "/api/requests/movie",
       headers: { cookie: memberCookie, "x-csrf-token": memberCsrf },
-      payload: { term: "dune", selectionId: "tmdb:438631", qualityProfileId: 1, rootFolderPath: "/movies", searchNow: true },
+      payload: { term: "dune", selectionId: "tmdb:438631", qualityProfileId: 1, searchNow: true },
     });
     expect(r.statusCode).toBe(200);
 

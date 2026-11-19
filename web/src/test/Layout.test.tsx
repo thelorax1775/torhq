@@ -101,4 +101,19 @@ describe("Layout navigation", () => {
     expect(labels(bar)).toEqual(["Search", "Discover", "Activity"]);
     expect(within(bar).getByRole("button", { name: "More" })).toBeInTheDocument();
   });
+
+  it("still renders for a member when /api/downloads is the reduced response", async () => {
+    mockApi({ "/api/downloads": { torrents: [], categories: {}, transfer: { dlspeed: 2048, upspeed: 1024 } } });
+    render(
+      <MemoryRouter initialEntries={["/requests"]}>
+        <Routes>
+          <Route element={<Layout onLogout={() => {}} role="member" />}>
+            <Route path="/requests" element={<div>page body</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("page body")).toBeInTheDocument();
+    expect(await screen.findByTitle("qBittorrent transfer rates")).toBeInTheDocument();
+  });
 });
