@@ -64,7 +64,7 @@ when an import stalls. The product definition lives in
 
 ## Architecture
 
-TorHQ is a TypeScript monorepo (npm workspaces, Node 20+).
+TorHQ is a TypeScript monorepo (npm workspaces, Node 22; Node 20 still works).
 
 ```
 ┌─────────────────────────────┐        ┌──────────────────────────────────┐
@@ -564,7 +564,7 @@ another origin reliably produces unreadable results rather than a matching one.
 
 ## Local development
 
-Requires **Node 20+** (22 works). `better-sqlite3` is a native module, so a C
+Requires **Node 22** (the supported version; Node 20 still works). `better-sqlite3` is a native module, so a C
 toolchain is needed on first install (`build-essential python3` on Debian).
 
 ```bash
@@ -1012,7 +1012,7 @@ git clone https://github.com/thelorax1775/torhq.git /opt/torhq-src && cd /opt/to
 `scripts/install.sh` is idempotent and will:
 
 1. Create the unprivileged `torhq` system user.
-2. Install Node.js 20 (NodeSource) if missing.
+2. Install Node.js 22 (NodeSource) if missing.
 3. Create the directory layout under `/srv/torhq` (`data`, `staging`,
    `downloads`, `libraries/{movies,tv,music,books,manga}`).
 4. Copy the source to `/srv/torhq/app`, run `npm ci`, and build.

@@ -7,7 +7,7 @@ TORHQ_USER="${TORHQ_USER:-torhq}"
 TORHQ_HOME="/srv/torhq"
 APP_DIR="${TORHQ_HOME}/app"
 ENV_DIR="/etc/torhq"
-NODE_MAJOR=20
+NODE_MAJOR=22
 
 echo "==> TorHQ install starting"
 
@@ -18,7 +18,7 @@ if ! id "${TORHQ_USER}" &>/dev/null; then
   adduser --system --group --home "${TORHQ_HOME}" --shell /usr/sbin/nologin "${TORHQ_USER}"
 fi
 
-# 2. Node.js 20 (NodeSource) if node is missing or too old.
+# 2. Node.js 22 (NodeSource) if node is missing or too old.
 if ! command -v node &>/dev/null || [[ "$(node -v | sed 's/v\([0-9]*\).*/\1/')" -lt ${NODE_MAJOR} ]]; then
   echo "==> Installing Node.js ${NODE_MAJOR}"
   apt-get update
