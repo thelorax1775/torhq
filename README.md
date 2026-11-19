@@ -100,7 +100,7 @@ TorHQ is a TypeScript monorepo (npm workspaces, Node 20+).
 
 | Table | Purpose |
 | --- | --- |
-| `users` | Single admin account (scrypt password hash). |
+| `users` | Admin and member accounts (scrypt password hash, role). |
 | `sessions` | Server-side sessions with a per-session CSRF token. |
 | `services` | One row per configured service; secret **encrypted**, adapter config as JSON. |
 | `libraries` | Manual-intake destinations (Kavita/Navidrome) with dest + staging paths. |
@@ -188,7 +188,9 @@ No \*arr manages books, so TorHQ's own intake does (see
    already hold it: Kavita's and Calibre-Web's own searches are asked, so a book
    in either shows *Available*.
 2. **Request/Add.** A member's request waits for an admin; the admin sees every
-   request and a member sees only their own, without any paths.
+   request and a member sees only their own, without any paths. A member never
+   chooses the folder: a request that names `rootFolderPath` is refused with 400,
+   and the *arr's saved default (then its first root) is used.
 3. **Find a release.** TorHQ searches Prowlarr restricted to the book categories
    (7000 Books, 7020 Books/EBook, 8000 Other) with *title + author*, and ranks
    the results **epub > azw3 > mobi > pdf, then seeders**. Releases whose name
@@ -252,7 +254,10 @@ land in **Audiobookshelf** (ABS). Differences from ebooks:
   library; the item shows *Available* once ABS has it. Nothing moves, and ABS is
   not scanned, before the approval click.
 - **Access.** Members can *Request* and see their own requests (no paths);
-  search, grab, approve and decline are admin-only.
+  search, grab, approve and decline are admin-only. The routes that carry server
+  paths are closed to members: import jobs and the *arr queue answer 403,
+  `/api/downloads` returns only the speed totals (no torrents, no save paths),
+  and the request options return no root folders.
 
 **Setup**
 
@@ -864,7 +869,11 @@ Turning the refresh rate down is worth doing for an always-on wall display.
 
 **Users** — accounts for you and your friends. A friend (member) can search, ask
 for things and follow them in Activity; every admin page and admin API answers a
-member with 403.
+member with 403. A member never sees or chooses a server path: `/api/jobs` and
+`/api/queue` are admin-only, `/api/downloads` gives a member only the transfer
+totals, `/api/requests/*/options` gives a member the quality profiles but an empty
+root-folder list, and a member request that names `rootFolderPath` is refused.
+An admin's `rootFolderPath` must be one of the *arr's own root folders.
 
 ### Dashboard
 
@@ -1076,8 +1085,8 @@ systemctl start torhq
   AES-256-GCM (key derived from `TORHQ_MASTER_KEY` via scrypt). The API returns
   only a masked hint (`••••••••abcd`); full secrets are never sent to the browser
   or written to logs (pino redaction covers cookies, auth headers, and secret-ish keys).
-- **Auth.** Single admin account, scrypt password hashing (N=32768), server-side
-  sessions in a `Strict`, `HttpOnly` cookie with a 12-hour TTL and a constant-work
+- **Auth.** Admin and member accounts, scrypt password hashing (N=32768), server-side
+  sessions in a `SameSite=Lax`, `HttpOnly` cookie with a 12-hour TTL and a constant-work
   path to blunt username-enumeration timing.
 - **CSRF.** Double-submit token required on **every** state-changing request
   (including logout), via the `X-CSRF-Token` header matched against the session.

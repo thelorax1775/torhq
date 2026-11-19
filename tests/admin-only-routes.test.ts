@@ -54,13 +54,13 @@ const ADMIN_ONLY_GETS = [
   "/api/pipeline/check",
   "/api/activity/log",
   "/api/status/health",
+  "/api/jobs",
+  "/api/queue",
 ];
 
 const FRIEND_SAFE_GETS = [
-  "/api/jobs",
   "/api/activity",
   "/api/downloads",
-  "/api/queue",
   "/api/requests/movie/options",
 ];
 
@@ -79,6 +79,13 @@ describe("friend-safe routes stay reachable for a member", () => {
     const r = await app.inject({ method: "GET", url, headers: { cookie: memberCookie } });
     expect(r.statusCode, url).not.toBe(401);
     expect(r.statusCode, url).not.toBe(403);
+  });
+});
+
+describe("job detail", () => {
+  it("GET /api/jobs/:id is 403 for a member", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/jobs/1", headers: { cookie: memberCookie } });
+    expect(r.statusCode).toBe(403);
   });
 });
 

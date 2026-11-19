@@ -57,10 +57,21 @@ export function downloadRoutes(app: FastifyInstance, ctx: AppContext): void {
 
   // Everything qBittorrent is holding, plus the transfer totals and the category
   // map the UI needs to offer a re-tag.
-  app.get("/api/downloads", { preHandler: app.requireAuth }, async (_req, reply) => {
+  // A member gets the speed totals only (the layout shows them): torrents carry
+  // server paths, so they stay admin-side.
+  app.get("/api/downloads", { preHandler: app.requireAuth }, async (req, reply) => {
     const qb = qbAdapter();
     if (!qb) return reply.code(409).send({ error: "qBittorrent is not configured" });
     try {
+      const isAdmin = req.session!.role === "admin";
+      if (!isAdmin) {
+        const t = await qb.transferInfo();
+        return {
+          torrents: [],
+          transfer: { dlspeed: t.dl_info_speed, upspeed: t.up_info_speed },
+          categories: {},
+        };
+      }
       const [torrents, transfer, categories] = await Promise.all([
         qb.torrents(), qb.transferInfo(), qb.categories(),
       ]);
@@ -117,7 +128,7 @@ export function downloadRoutes(app: FastifyInstance, ctx: AppContext): void {
   // The *arr side of the same downloads, merged. A service that is missing or
   // down degrades into `unavailable` — it never fails the whole response, because
   // a broken Lidarr must not hide what Radarr is doing.
-  app.get("/api/queue", { preHandler: app.requireAuth }, async () => {
+  app.get("/api/queue", { preHandler: [app.requireAuth, app.requireAdmin] }, async () => {
     const items: ArrQueueItem[] = [];
     const unavailable: Array<{ service: ArrFlavor; detail: string }> = [];
     await Promise.all(ARR_SERVICES.map(async (service) => {
