@@ -1061,7 +1061,12 @@ holds `TORHQ_MASTER_KEY`). **Media libraries are not backed up by TorHQ.**
 ```
 
 `scripts/backup.sh` produces `torhq-<timestamp>.tar.gz` containing a consistent
-DB snapshot and a copy of `torhq.env`.
+DB snapshot and a copy of `torhq.env`, and nothing else is left in the
+destination. The tarball is mode `600` (owner-only) and a destination directory
+the script creates is mode `700`, whatever the caller's umask, because the
+archive contains the master key. Backups made before this change are probably
+world-readable: run `chmod 600 /srv/torhq/backups/torhq-*.tar.gz` by hand and
+delete any stray `torhq-*.db-shm` / `torhq-*.db-wal` files beside them.
 
 > **The master key is everything.** Encrypted service secrets are unreadable
 > without the `TORHQ_MASTER_KEY` that was in effect when they were saved. Protect
