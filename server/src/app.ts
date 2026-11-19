@@ -51,7 +51,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   });
 
   // Uniform error shape; hide internals, surface validation messages.
-  app.setErrorHandler((err, _req, reply) => {
+  app.setErrorHandler((err: any, _req, reply) => {
     if (err instanceof ZodError) {
       // Name the fields. "validation failed" on its own sends the user hunting
       // through a form of a dozen inputs for the one the server rejected, and

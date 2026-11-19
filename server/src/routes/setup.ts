@@ -14,7 +14,7 @@ const ServiceInput = z.object({
   baseUrl: z.string().url(),
   secret: z.string().max(1024).optional(),
   enabled: z.boolean().optional(),
-  extra: z.record(z.unknown()).optional(),
+  extra: z.record(z.string(), z.unknown()).optional(),
 });
 
 const LibraryInput = z.object({

@@ -14,16 +14,16 @@
     "migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {
-    "@fastify/cookie": "^9.3.1",
-    "@fastify/rate-limit": "^9.1.0",
-    "@fastify/static": "^7.0.4",
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/rate-limit": "^11.2.2",
+    "@fastify/static": "^10.1.12",
     "better-sqlite3": "^11.3.0",
-    "drizzle-orm": "^0.33.0",
-    "fastify": "^4.28.1",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.8",
     "node-html-parser": "^6.1.13",
     "pino": "^9.3.2",
-    "undici": "^6.19.8",
-    "zod": "^3.23.8"
+    "undici": "^6.29.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
