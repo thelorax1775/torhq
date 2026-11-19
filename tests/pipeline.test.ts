@@ -139,7 +139,11 @@ describe("save-path visibility", () => {
         { path: "/mnt/torrents2", visible: false, parentVisible: false },
       ],
     });
-    const check = find(run(arr), "radarr-sees-save-path");
+    // Radarr's category lives on a second, unmounted volume; the default path is fine.
+    const qb: QbSnapshot = {
+      ...QB, categories: { ...QB.categories, radarr: { name: "radarr", savePath: "/mnt/torrents2" } },
+    };
+    const check = find(run(arr, qb), "radarr-sees-save-path");
     expect(check.ok).toBe(false);
     expect(check.detail).toContain("/mnt/torrents2");
     expect(check.detail).not.toContain("/mnt/torrents/radarr");
@@ -274,5 +278,42 @@ describe("isInside", () => {
   it("refuses empty paths rather than matching everything", () => {
     expect(isInside("", "/mnt")).toBe(false);
     expect(isInside("/mnt", "")).toBe(false);
+  });
+});
+
+describe("save-path visibility is scoped to the categories an *arr uses", () => {
+  const withBooks: QbSnapshot = {
+    ...QB,
+    categories: {
+      ...QB.categories,
+      "torhq-books": { name: "torhq-books", savePath: "/mnt/torrents/torhq-books" },
+      "torhq-audiobooks": { name: "torhq-audiobooks", savePath: "/mnt/torrents/torhq-audiobooks" },
+    },
+  };
+
+  it("does not call a missing TorHQ book directory a Radarr mount failure", () => {
+    const radarr = healthy("radarr", {
+      visiblePaths: [
+        { path: "/mnt/torrents/radarr", visible: true, parentVisible: true },
+        { path: "/mnt/torrents", visible: true, parentVisible: true },
+        { path: "/mnt/torrents/torhq-books", visible: false, parentVisible: false },
+        { path: "/mnt/torrents/torhq-audiobooks", visible: false, parentVisible: false },
+      ],
+    });
+    const c = find(run(radarr, withBooks), "radarr-sees-save-path");
+    expect(c.ok).toBe(true);
+    expect(c.detail).not.toContain("torhq-");
+  });
+
+  it("still fails when the *arr's own category directory is not mounted", () => {
+    const radarr = healthy("radarr", {
+      visiblePaths: [
+        { path: "/mnt/torrents/radarr", visible: false, parentVisible: false },
+        { path: "/mnt/torrents/torhq-books", visible: true, parentVisible: true },
+      ],
+    });
+    const c = find(run(radarr, withBooks), "radarr-sees-save-path");
+    expect(c.ok).toBe(false);
+    expect(c.detail).toContain("/mnt/torrents/radarr");
   });
 });
