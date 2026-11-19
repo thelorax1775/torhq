@@ -1136,7 +1136,9 @@ web/               React + Vite SPA
   src/lib/         the single data layer: usePolled / useMutation / format / prefs
   src/pages/       one file per route
 tests/             Vitest suites (crypto, paths, routing, intake, migrations,
-                   search, downloads, queue, pipeline, catalogue)
+                   search, downloads, queue, pipeline, catalogue, and the
+                   self-update worker deploy/updater/update-worker.mjs, run
+                   against a throwaway git origin)
 scripts/           install / upgrade / backup
 deploy/            systemd unit + nginx reverse-proxy config
 docs/              API curl examples + the revamp contract
