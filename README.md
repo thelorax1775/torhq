@@ -718,8 +718,7 @@ lists under *Needs attention*.
    Docker users: mount the same host directory at the same path in every
    container, not `/downloads` in one and `/data/torrents` in another.
 
-Then open **Transfers** and confirm nothing is listed under *Needs attention*. A scripted
-walkthrough of every endpoint is in [`docs/curl-examples.md`](docs/curl-examples.md).
+Then open **Transfers** and confirm nothing is listed under *Needs attention*. Examples of the main flows are in [`docs/curl-examples.md`](docs/curl-examples.md).
 
 ---
 
@@ -1134,11 +1133,17 @@ systemctl start torhq
 
 ## API
 
-The server exposes an OpenAPI 3.1 document at `GET /api/openapi.json`, and a
-`curl` walkthrough of every endpoint lives in
-[`docs/curl-examples.md`](docs/curl-examples.md). All `/api/*` routes except the
-auth endpoints require a session; all mutating routes additionally require the
-CSRF header.
+The server exposes a partial, hand-written OpenAPI 3.1 document at `GET /api/openapi.json` — it does not cover all routes. [`docs/curl-examples.md`](docs/curl-examples.md) shows the main flows, not a complete list.
+
+Routes that need no session:
+- `/api/auth/*` — register, login, me
+- `/api/openapi.json`
+- `/health`
+- `/ready`
+- `/metrics` (only when `TORHQ_METRICS_ENABLED` is set)
+- `/webhooks/slskd` — uses its own shared-token header (`X-TorHQ-Token`)
+
+All other `/api/*` routes require a session; all mutating routes additionally require the CSRF header.
 
 ---
 
