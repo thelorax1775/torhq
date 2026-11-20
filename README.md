@@ -1088,8 +1088,9 @@ systemctl start torhq
 
 - **Secrets stay server-side.** Service credentials are encrypted at rest with
   AES-256-GCM (key derived from `TORHQ_MASTER_KEY` via scrypt). The API returns
-  only a masked hint showing whether a secret is saved (`••••••••`); full secrets are never sent to the browser
-  or written to logs (pino redaction covers cookies, auth headers, and secret-ish keys).
+  only whether a secret is saved (shown as `••••••••`); full secrets are never sent
+  to the browser or written to logs (pino redaction covers cookies, auth headers,
+  and secret-ish keys).
 - **Auth.** Admin and member accounts, scrypt password hashing (N=32768), server-side
   sessions in a `SameSite=Lax`, `HttpOnly` cookie with a 12-hour TTL and a constant-work
   path to blunt username-enumeration timing.
