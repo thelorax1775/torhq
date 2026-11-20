@@ -1,7 +1,8 @@
 import { promises as fs } from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import { join, basename } from "node:path";
 import type { Stats } from "node:fs";
-import type { Buffer } from "node:buffer";
+import { Buffer } from "node:buffer";
 import { getLibrary } from "../config/store.js";
 import { getAdapter } from "../adapters/registry.js";
 import { NavidromeAdapter } from "../adapters/navidrome.js";
@@ -169,12 +170,12 @@ async function exists(path: string): Promise<boolean> {
 }
 
 /**
- * Every regular file under `path` mapped to its size, keyed by its path
+ * Every regular file under `path` with its size and identity, keyed by its path
  * relative to `path` (the empty string when `path` is itself a file).
  * Symlinks are ignored; directories contribute only the files inside them.
  */
-async function fileSizes(path: string): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
+async function fileInfos(path: string): Promise<Map<string, Stats>> {
+  const out = new Map<string, Stats>();
   const walk = async (abs: string, rel: string): Promise<void> => {
     const st: Stats = await fs.lstat(abs);
     if (st.isSymbolicLink()) return;
@@ -182,22 +183,65 @@ async function fileSizes(path: string): Promise<Map<string, number>> {
       for (const name of await fs.readdir(abs)) await walk(join(abs, name), rel ? `${rel}/${name}` : name);
       return;
     }
-    out.set(rel, st.size);
+    out.set(rel, st);
   };
   await walk(path, "");
   return out;
 }
 
+/** Do two files hold the same bytes? Streams both; never loads a whole file. */
+async function sameBytes(a: string, b: string): Promise<boolean> {
+  const [fa, fb] = [await fs.open(a, "r"), await fs.open(b, "r")];
+  try {
+    const bufA = Buffer.allocUnsafe(1 << 20);
+    const bufB = Buffer.allocUnsafe(1 << 20);
+    for (;;) {
+      const [ra, rb] = [
+        await readFull(fa, bufA),
+        await readFull(fb, bufB),
+      ];
+      if (ra !== rb) return false;
+      if (ra === 0) return true;
+      if (!bufA.subarray(0, ra).equals(bufB.subarray(0, rb))) return false;
+    }
+  } finally {
+    await fa.close();
+    await fb.close();
+  }
+}
+
+async function readFull(fh: FileHandle, buf: Buffer): Promise<number> {
+  let n = 0;
+  while (n < buf.length) {
+    const { bytesRead } = await fh.read(buf, n, buf.length - n, null);
+    if (bytesRead === 0) break;
+    n += bytesRead;
+  }
+  return n;
+}
+
 /**
- * Does the destination hold what the source holds? Same relative file paths,
- * same sizes. This is what tells a retry of an import that already landed (safe
- * to finish) from a different item that merely has the same name (must not be
- * treated as imported, and its source must not be deleted).
+ * Does the destination hold what the source holds? Same relative file paths and
+ * the same bytes in each. Sizes reject cheaply, the same inode (a hardlinked
+ * import) short-circuits, and anything else is compared by streaming both
+ * files. This is what tells a retry of an import that already landed (safe to
+ * finish) from a different item that merely has the same name and sizes (must
+ * not be treated as imported, and its source must not be deleted).
  */
 async function sameContent(source: string, dest: string): Promise<boolean> {
-  const [a, b] = await Promise.all([fileSizes(source), fileSizes(dest)]);
+  const [a, b] = await Promise.all([fileInfos(source), fileInfos(dest)]);
   if (a.size !== b.size) return false;
-  for (const [rel, size] of a) if (b.get(rel) !== size) return false;
+  for (const [rel, sa] of a) {
+    const sb = b.get(rel);
+    if (!sb || sb.size !== sa.size) return false;
+  }
+  for (const [rel, sa] of a) {
+    const sb = b.get(rel)!;
+    if (sa.dev === sb.dev && sa.ino === sb.ino) continue;
+    const pa = rel ? join(source, rel) : source;
+    const pb = rel ? join(dest, rel) : dest;
+    if (!(await sameBytes(pa, pb))) return false;
+  }
   return true;
 }
 
