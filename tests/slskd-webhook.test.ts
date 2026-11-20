@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
@@ -8,7 +8,7 @@ import { runMigrations } from "../server/src/db/migrate.js";
 import { loadEnv } from "../server/src/config/env.js";
 import { makeContext } from "../server/src/lib/context.js";
 import { buildApp } from "../server/src/app.js";
-import { upsertService, upsertLibrary, getLibrary } from "../server/src/config/store.js";
+import { upsertService, upsertLibrary } from "../server/src/config/store.js";
 import { getJob } from "../server/src/queue/queue.js";
 
 let app: FastifyInstance;
@@ -16,7 +16,7 @@ let dataDir: string;
 let ctx: ReturnType<typeof makeContext>;
 let masterKey: Buffer;
 
-beforeAll(async () => {
+async function createTestApp() {
   dataDir = mkdtempSync(join(tmpdir(), "torhq-slskd-webhook-"));
   const env = loadEnv({
     NODE_ENV: "test",
@@ -30,27 +30,23 @@ beforeAll(async () => {
   masterKey = ctx.masterKey;
   app = await buildApp(ctx);
   await app.ready();
-});
+}
 
-afterAll(async () => {
-  await app.close();
-  rmSync(dataDir, { recursive: true, force: true });
-});
+async function closeTestApp() {
+  if (app) {
+    await app.close();
+  }
+  if (dataDir) {
+    rmSync(dataDir, { recursive: true, force: true });
+  }
+}
 
 beforeEach(async () => {
-  // Reset DB state between tests by re-initializing
-  const env = loadEnv({
-    NODE_ENV: "test",
-    TORHQ_MASTER_KEY: "test-master-key-0123456789",
-    TORHQ_DATA_DIR: dataDir,
-    TORHQ_APPROVED_ROOTS: dataDir,
-  } as any);
-  initDb(env.TORHQ_DATA_DIR);
-  runMigrations();
-  ctx = makeContext(env);
-  masterKey = ctx.masterKey;
-  app = await buildApp(ctx);
-  await app.ready();
+  await createTestApp();
+});
+
+afterEach(async () => {
+  await closeTestApp();
 });
 
 async function postSlskd(body: any, token?: string) {
@@ -139,6 +135,8 @@ describe("slskd completed-download webhook", () => {
   });
 
   describe("request validation", () => {
+    let tmpLib: string;
+
     beforeEach(async () => {
       upsertService(
         {
@@ -149,17 +147,21 @@ describe("slskd completed-download webhook", () => {
         },
         masterKey
       );
-      const tmp = mkdtempSync(join(tmpdir(), "torhq-lib-"));
+      tmpLib = mkdtempSync(join(tmpdir(), "torhq-lib-"));
       upsertLibrary({
         key: "navidrome-music",
         label: "Music",
         kind: "music",
         targetService: "navidrome",
-        destPath: join(tmp, "m"),
-        stagingPath: join(tmp, "s"),
+        destPath: join(tmpLib, "m"),
+        stagingPath: join(tmpLib, "s"),
         rescan: false,
         importMode: "move",
       });
+    });
+
+    afterEach(() => {
+      rmSync(tmpLib, { recursive: true, force: true });
     });
 
     it("returns 400 when localPath is missing from body", async () => {
@@ -171,7 +173,7 @@ describe("slskd completed-download webhook", () => {
   });
 
   describe("successful enqueue", () => {
-    let tmp: string;
+    let tmpLib: string;
 
     beforeEach(async () => {
       upsertService(
@@ -183,25 +185,25 @@ describe("slskd completed-download webhook", () => {
         },
         masterKey
       );
-      tmp = mkdtempSync(join(tmpdir(), "torhq-lib-"));
+      tmpLib = mkdtempSync(join(tmpdir(), "torhq-lib-"));
       upsertLibrary({
         key: "navidrome-music",
         label: "Music",
         kind: "music",
         targetService: "navidrome",
-        destPath: join(tmp, "m"),
-        stagingPath: join(tmp, "s"),
+        destPath: join(tmpLib, "m"),
+        stagingPath: join(tmpLib, "s"),
         rescan: false,
         importMode: "move",
       });
     });
 
     afterEach(() => {
-      rmSync(tmp, { recursive: true, force: true });
+      rmSync(tmpLib, { recursive: true, force: true });
     });
 
     it("returns 200 with ok and jobId, and job has correct properties", async () => {
-      const localPath = join(tmp, "dl", "Album");
+      const localPath = join(tmpLib, "dl", "Album");
       const res = await postSlskd({ localPath }, "correct-token-1");
       expect(res.statusCode).toBe(200);
       const body = res.json();
@@ -218,7 +220,7 @@ describe("slskd completed-download webhook", () => {
     });
 
     it("returns same jobId on duplicate call with same localPath (idempotency)", async () => {
-      const localPath = join(tmp, "dl", "Album");
+      const localPath = join(tmpLib, "dl", "Album");
       const res1 = await postSlskd({ localPath }, "correct-token-1");
       expect(res1.statusCode).toBe(200);
       const jobId1 = res1.json().jobId;
