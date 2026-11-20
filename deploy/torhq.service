@@ -1,6 +1,6 @@
 [Unit]
 Description=TorHQ media homelab control plane
-Documentation=https://github.com/your-org/torhq
+Documentation=https://github.com/thelorax1775/torhq
 After=network-online.target
 Wants=network-online.target
 
