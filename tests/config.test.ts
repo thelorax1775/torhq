@@ -1,4 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { initDb } from "../server/src/db/index.js";
+import { runMigrations } from "../server/src/db/migrate.js";
+import { deriveKey } from "../server/src/lib/crypto.js";
+import { upsertService, listServicesSafe } from "../server/src/config/store.js";
 import { mergeExtra, safeExtra, hasExtraConfig } from "../server/src/config/extra.js";
 import { loadEnv } from "../server/src/config/env.js";
 
@@ -65,5 +72,36 @@ describe("typed extra config: safeExtra never leaks secrets", () => {
   });
   it("passes non-secret fields through", () => {
     expect(safeExtra("kavita", { libraryId: 3 })).toEqual({ libraryId: 3 });
+  });
+});
+
+describe("secret mask in listServicesSafe", () => {
+  let dir: string;
+  const masterKey = deriveKey("secret-mask-test-key");
+
+  beforeAll(() => {
+    dir = mkdtempSync(join(tmpdir(), "torhq-secret-mask-"));
+    initDb(dir);
+    runMigrations();
+  });
+
+  afterAll(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns 8 bullets for a service with a secret, null without", () => {
+    upsertService(
+      { kind: "radarr", label: "Radarr", baseUrl: "http://x", secret: "abcd1234wxyz" },
+      masterKey
+    );
+    const withSecret = listServicesSafe().find((s) => s.kind === "radarr");
+    expect(withSecret!.secretMask).toBe("••••••••");
+
+    upsertService(
+      { kind: "sonarr", label: "Sonarr", baseUrl: "http://y", enabled: true },
+      masterKey
+    );
+    const withoutSecret = listServicesSafe().find((s) => s.kind === "sonarr");
+    expect(withoutSecret!.secretMask).toBeNull();
   });
 });
