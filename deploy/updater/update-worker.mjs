@@ -63,8 +63,38 @@ function log(line) {
   appendFileSync(LOG, `${line}\n`);
 }
 
+/**
+ * Optional GitHub token (TORHQ_GITHUB_TOKEN in the env file; never from the UI) for a private
+ * repo. Handed to git through GIT_CONFIG_* environment variables so it never appears in a
+ * command line, the log or the status file.
+ */
+function gitAuthEnv() {
+  const token = fileEnv.TORHQ_GITHUB_TOKEN;
+  if (!token) return {};
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
+    GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basic}`,
+    GIT_TERMINAL_PROMPT: "0",
+  };
+}
+
 function git(...args) {
-  return execFileSync("git", ["-C", APP_DIR, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  return execFileSync("git", ["-C", APP_DIR, ...args], {
+    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ...gitAuthEnv() },
+  }).trim();
+}
+
+function fetchOrigin() {
+  try {
+    git("fetch", "--quiet", "origin");
+  } catch {
+    const hint = fileEnv.TORHQ_GITHUB_TOKEN
+      ? "check the network and that TORHQ_GITHUB_TOKEN can read the repository"
+      : "check the network; a private repository needs TORHQ_GITHUB_TOKEN in the env file";
+    throw new Error(`Cannot reach GitHub (git fetch failed) — ${hint}`);
+  }
 }
 
 function run(step, cmd, args, env = {}) {
@@ -72,7 +102,7 @@ function run(step, cmd, args, env = {}) {
   log(`\n==> ${step}: ${[cmd, ...args].join(" ")}`);
   const fd = openSync(LOG, "a");
   try {
-    const r = spawnSync(cmd, args, { cwd: APP_DIR, stdio: ["ignore", fd, fd], env: { ...process.env, ...env } });
+    const r = spawnSync(cmd, args, { cwd: APP_DIR, stdio: ["ignore", fd, fd], env: { ...process.env, ...gitAuthEnv(), ...env } });
     if (r.error) throw new Error(`${step} could not start: ${r.error.message}`);
     if (r.status !== 0) throw new Error(`${step} failed (exit ${r.status ?? r.signal}) — see the log below`);
   } finally {
@@ -86,7 +116,7 @@ function headCommit() {
 
 function revisions() {
   log("==> fetch: git fetch origin");
-  git("fetch", "--quiet", "origin");
+  fetchOrigin();
   const commits = git("log", "--format=%h%x09%s", "HEAD..@{u}")
     .split("\n").filter(Boolean)
     .map((l) => { const [sha, ...rest] = l.split("\t"); return { sha, subject: rest.join("\t") }; });
@@ -107,6 +137,27 @@ function summary(rev) {
   if (rev.diverged) return `Local checkout has diverged from origin/${rev.branch}; a fast-forward update is not possible`;
   if (rev.behind === 0) return "Up to date";
   return `${rev.behind} new commit${rev.behind === 1 ? "" : "s"} on origin/${rev.branch}`;
+}
+
+/**
+ * A step failed after the pull: put the previous commit back (the running service was never
+ * restarted, so it is still the old version) and best-effort rebuild it so a later restart
+ * starts the old version too. The backup taken before the pull is left untouched.
+ */
+function rollback(previous) {
+  try {
+    log(`\n==> rollback: restoring ${previous.slice(0, 7)}`);
+    if (git("rev-parse", "HEAD") !== previous) run("rollback", "git", ["reset", "--hard", previous]);
+    try {
+      run("rollback-install", "npm", ["ci", "--include=dev", "--no-audit", "--no-fund"]);
+      run("rollback-build", "npm", ["run", "build"]);
+    } catch (e) {
+      log(`rollback rebuild failed: ${e instanceof Error ? e.message : e}`);
+    }
+    writeStatus({ current: headCommit() });
+  } catch (e) {
+    log(`rollback failed: ${e instanceof Error ? e.message : e} — restore ${previous} by hand`);
+  }
 }
 
 function take() {
@@ -136,11 +187,17 @@ function apply() {
   const dirty = git("status", "--porcelain", "--untracked-files=no");
   if (dirty) throw new Error(`${APP_DIR} has uncommitted changes; refusing to update over them:\n${dirty}`);
 
+  const previous = git("rev-parse", "HEAD");
   run("backup", "bash", [join(APP_DIR, "scripts/backup.sh")]);
-  run("pull", "git", ["pull", "--ff-only"]);
-  run("install", "npm", ["ci", "--include=dev", "--no-audit", "--no-fund"]);
-  run("build", "npm", ["run", "build"]);
-  run("migrate", "npm", ["run", "migrate", "--workspace", "server"], fileEnv);
+  try {
+    run("pull", "git", ["pull", "--ff-only"]);
+    run("install", "npm", ["ci", "--include=dev", "--no-audit", "--no-fund"]);
+    run("build", "npm", ["run", "build"]);
+    run("migrate", "npm", ["run", "migrate", "--workspace", "server"], fileEnv);
+  } catch (e) {
+    rollback(previous);
+    throw e;
+  }
   writeStatus({ state: "restarting", step: "restart", current: headCommit(), behind: 0, commits: [] });
   log("\n==> restart: systemctl restart torhq");
   return 0;

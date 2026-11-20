@@ -639,6 +639,7 @@ database — never in env, never in git. See [`.env.example`](.env.example).
 | `TORHQ_TRUST_PROXY` | `false` | Trust `X-Forwarded-*` (enable **only** behind a trusted reverse proxy). |
 | `TORHQ_COOKIE_SECURE` | `false` | Mark the session cookie `Secure` (enable when served over HTTPS). |
 | `TORHQ_METRICS_ENABLED` | `false` | Expose Prometheus metrics at `/metrics`. |
+| `TORHQ_GITHUB_TOKEN` | *(unset)* | Optional, in `/etc/torhq/torhq.env` only: read-only GitHub token the update helper uses for a private repo. Never logged. |
 | `TORHQ_LOG_LEVEL` | `info` | `fatal` \| `error` \| `warn` \| `info` \| `debug` \| `trace`. |
 
 ---
@@ -1040,7 +1041,27 @@ TorHQ binds to loopback. Terminate TLS with nginx
 `ReadWritePaths` list. **`ReadWritePaths` must include every media path you want
 intake to write to** — keep it consistent with `TORHQ_APPROVED_ROOTS`.
 
-### Upgrades
+### Updating
+
+**From the UI (admins only):** Settings → *Updates* shows the running commit and the
+newest commit on `origin/<branch>` on GitHub (this repo publishes no releases, so the
+branch head is the "newest version"). *Check for updates* fetches; *Update now* is
+disabled when you are up to date and asks for confirmation. The app only queues a
+request; a root-owned systemd path unit (`torhq-update.path`, installed once by
+`scripts/upgrade.sh`) runs the update as the `torhq` user in the background and the
+page polls its status and log. The steps are: back up the database, `git pull
+--ff-only`, `npm ci`, build, migrate, restart. If any step fails the checkout is reset
+to the previous commit and rebuilt, the service is never restarted, so the old version
+keeps running, and the pre-update backup is kept. Data and config are never touched.
+The request is admin-only and CSRF-protected; no ref, path or command comes from the
+request.
+
+**Private repository:** set `TORHQ_GITHUB_TOKEN` (a read-only token) in
+`/etc/torhq/torhq.env`. It is read only by the update helper, passed to git through
+the environment, and never logged or shown. Without it a private repo fails with
+"Cannot reach GitHub".
+
+**Manual fallback** (also how to install the helper the first time):
 
 ```bash
 /srv/torhq/app/scripts/upgrade.sh   # backs up, pulls, npm ci, build, migrate, restart
