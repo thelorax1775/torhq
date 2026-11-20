@@ -213,6 +213,56 @@ describe("deploy/updater/update-worker.mjs", () => {
     expect(existsSync(t.mark("migrate"))).toBe(false);
   });
 
+  it("apply: a failing step rolls the checkout back to the old version and keeps the backup", () => {
+    const t = setup({ buildFails: true });
+    const before = t.head();
+    t.pushToOrigin("new feature");
+    const r = t.run("apply");
+    expect(r.status).not.toBe(0);
+    expect(t.head()).toBe(before);
+    expect(t.status()).toMatchObject({ state: "failed" });
+    expect(t.log()).toContain("rollback");
+    expect(readFileSync(t.mark("backup"), "utf8").trim()).toBe(before);
+    expect(readFileSync(join(t.app, "file.txt"), "utf8")).toBe("one\n");
+  });
+
+  it("check/apply: GitHub unreachable reports it plainly and changes nothing", () => {
+    const t = setup();
+    const before = t.head();
+    sh(t.app, "git", ["remote", "set-url", "origin", join(t.root, "gone.git")]);
+    for (const phase of ["check", "apply"]) {
+      const r = t.run(phase);
+      expect(r.status).not.toBe(0);
+      expect(t.status()).toMatchObject({ state: "failed" });
+      expect(t.status().message).toContain("Cannot reach GitHub");
+      expect(t.status().message).toContain("TORHQ_GITHUB_TOKEN");
+    }
+    expect(t.head()).toBe(before);
+    expect(existsSync(t.mark("backup"))).toBe(false);
+  });
+
+  it("never writes the GitHub token to the log or status", () => {
+    const t = setup();
+    const secret = "ghp_SECRET_TOKEN_VALUE_123";
+    writeFileSync(t.envFile, `TORHQ_DATA_DIR=${t.data}\nTORHQ_PORT=1\nTORHQ_GITHUB_TOKEN=${secret}\n`);
+    t.pushToOrigin("new feature");
+    t.run("apply");
+    sh(t.app, "git", ["remote", "set-url", "origin", join(t.root, "gone.git")]);
+    t.run("check");
+    expect(t.log()).not.toContain(secret);
+    expect(JSON.stringify(t.status())).not.toContain(secret);
+    expect(t.status().message).toContain("Cannot reach GitHub");
+  });
+
+  it("check: compares against the origin head - behind, equal, and ahead-of-origin (diverged)", () => {
+    const t = setup();
+    expect(t.run("check").status).toBe(0);
+    expect(t.status()).toMatchObject({ behind: 0, diverged: false });
+    t.pushToOrigin("newer");
+    t.run("check");
+    expect(t.status()).toMatchObject({ behind: 1, diverged: false, latest: t.originHead().slice(0, 7) });
+  });
+
   it("finish: records success once /health answers", async () => {
     const t = setup();
     const server = createServer((req, res) => {
