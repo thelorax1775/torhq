@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import {
   mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync,
-  statSync, lstatSync, symlinkSync, readlinkSync,
+  statSync, lstatSync, symlinkSync, readlinkSync, readFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -198,6 +198,41 @@ describe("runIntake when the destination name is taken", () => {
       .rejects.toThrow(/nothing was deleted/);
     expect(existsSync(src)).toBe(true);
     expect(statSync(dest).isFile()).toBe(true);
+  });
+
+  it("refuses when names and sizes match but the bytes differ (move mode)", async () => {
+    const dest = libDir("libraries", "manga", "Same Size");
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(join(dest, "a.cbz"), "AAAA");
+    const src = libDir("downloads", "Same Size");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "a.cbz"), "BBBB");
+
+    const p = await previewIntake({ libraryKey: "kavita-manga", sourcePath: src }, [root]);
+    expect(p.warnings.join(" ")).not.toContain("holds the same files");
+    expect(p.warnings.join(" ")).toContain("holds different files");
+
+    await expect(runIntake("job-samesize", { libraryKey: "kavita-manga", sourcePath: src }, [root], masterKey))
+      .rejects.toThrow(/nothing was deleted/);
+    expect(readFileSync(join(src, "a.cbz"), "utf8")).toBe("BBBB");
+    expect(readFileSync(join(dest, "a.cbz"), "utf8")).toBe("AAAA");
+  });
+
+  it("refuses when names and sizes match but the bytes differ (link mode)", async () => {
+    const dest = libDir("libraries", "seeded", "Same Size");
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(join(dest, "a.cbz"), "AAAA");
+    const src = libDir("downloads", "Same Size Seeded");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "a.cbz"), "BBBB");
+
+    await expect(runIntake(
+      "job-samesize-link",
+      { libraryKey: "kavita-seeded", sourcePath: src, targetName: "Same Size" },
+      [root], masterKey,
+    )).rejects.toThrow(/nothing was deleted/);
+    expect(readFileSync(join(src, "a.cbz"), "utf8")).toBe("BBBB");
+    expect(readFileSync(join(dest, "a.cbz"), "utf8")).toBe("AAAA");
   });
 
   it("crash retry: same files and sizes at the destination finishes cleanly", async () => {

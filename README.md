@@ -153,12 +153,13 @@ source folder (or the book's title), so a different item can already be sitting
 at that name: two books with one title, or a better copy of one you hold. TorHQ
 compares the two before doing anything:
 
-- **Different files** (any file name or size differs): the import **fails** with
+- **Different files** (a file name, size or content differs): the import **fails** with
   a message naming the destination, and **nothing is deleted** — the download
   stays where it is and the library item is untouched. The preview warns about
   this before you approve. Import under another name, or move the existing item
   out of the library, then try again.
-- **The same files with the same sizes**: this is an import that already landed
+- **The same files with the same bytes** (names, sizes and contents all
+  match; a hardlink to the same file counts): this is an import that already landed
   (a retry after a crash, or the same download imported twice). It finishes as
   "already present"; in move mode the now-duplicate source is deleted.
 - **The source is already gone**: the earlier attempt finished; the job succeeds.
