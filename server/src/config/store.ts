@@ -1,7 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.js";
 import { services, libraries, jobs, type Service, type Library } from "../db/schema.js";
-import { encryptSecret, decryptSecret, maskSecret } from "../lib/crypto.js";
+import { encryptSecret, decryptSecret } from "../lib/crypto.js";
 import { mergeExtra, safeExtra } from "./extra.js";
 
 export const SERVICE_KINDS = [
@@ -76,7 +76,7 @@ export function listServicesSafe(): Array<
     enabled: r.enabled,
     lastHealthy: r.lastHealthy,
     lastStatus: r.lastStatus,
-    secretMask: r.secretEnc ? maskSecret(r.secretEnc) : null,
+    secretMask: r.secretEnc ? "••••••••" : null,
     // Secret extra fields (e.g. slskd webhookToken) are projected to booleans.
     extra: safeExtra(r.kind, r.extraJson ? JSON.parse(r.extraJson) : {}),
   }));
