@@ -14,8 +14,13 @@ export function token(bytes = 32): string {
 export async function createAdmin(username: string, password: string): Promise<User> {
   const db = getDb();
   const passwordHash = await hashPassword(password);
-  db.insert(users).values({ username, passwordHash, role: "admin" }).run();
-  return db.select().from(users).where(eq(users.username, username)).get()!;
+  return db.transaction(() => {
+    if (adminExists()) {
+      throw new Error("ADMIN_EXISTS");
+    }
+    db.insert(users).values({ username, passwordHash, role: "admin" }).run();
+    return db.select().from(users).where(eq(users.username, username)).get()!;
+  });
 }
 
 export function adminExists(): boolean {
