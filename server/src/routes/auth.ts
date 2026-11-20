@@ -35,10 +35,17 @@ export function authRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.post("/api/auth/register", credentialLimit, async (req, reply) => {
     if (adminExists()) return reply.code(409).send({ error: "admin already exists" });
     const body = Credentials.parse(req.body);
-    const user = await createAdmin(body.username, body.password);
-    const s = createSession(user);
-    reply.setCookie(SESSION_COOKIE, s.sessionId, cookieOpts);
-    return { username: user.username, csrfToken: s.csrfToken };
+    try {
+      const user = await createAdmin(body.username, body.password);
+      const s = createSession(user);
+      reply.setCookie(SESSION_COOKIE, s.sessionId, cookieOpts);
+      return { username: user.username, csrfToken: s.csrfToken };
+    } catch (err: any) {
+      if (err.message === "ADMIN_EXISTS") {
+        return reply.code(409).send({ error: "admin already exists" });
+      }
+      throw err;
+    }
   });
 
   app.post("/api/auth/login", credentialLimit, async (req, reply) => {
