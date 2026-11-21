@@ -12,6 +12,18 @@ import { logActivity } from "./activity.js";
 import { safeFilename } from "../security/paths.js";
 
 /**
+ * A path segment for a book/audiobook name: splits on slashes, drops empty/dot-only parts,
+ * joins with "_", then passes through safeFilename for final cleanup.
+ * Keeps the whole name when it contains slashes (e.g., "Either/Or" -> "Either_Or",
+ * "AC/DC" -> "AC_DC").
+ */
+function nameSegment(s: string): string {
+  const parts = s.split(/[\\/]+/).map((p) => p.trim());
+  const kept = parts.filter((p) => p.length > 0 && !/^\.+$/.test(p));
+  return safeFilename(kept.join("_"));
+}
+
+/**
  * Wanted items: books that no *arr owns. TorHQ's own intake does the import
  * (docs/vision.md), so this module is the glue that carries one title through:
  *
@@ -122,8 +134,8 @@ async function targetFor(w: WantedItem, sourcePath: string): Promise<{ targetNam
   if (w.kind === "audiobook") {
     // Audiobookshelf's layout is Author/Title/<files>. A folder download becomes
     // the Title folder; a lone file goes inside a Title folder.
-    const author = safeFilename(w.author || "Unknown Author");
-    const title = safeFilename(w.title);
+    const author = nameSegment(w.author || "Unknown Author");
+    const title = nameSegment(w.title);
     const st = await fs.lstat(sourcePath);
     return st.isDirectory()
       ? { targetName: title, destSubdir: author }
@@ -133,7 +145,7 @@ async function targetFor(w: WantedItem, sourcePath: string): Promise<{ targetNam
 }
 
 async function targetNameFor(w: WantedItem, sourcePath: string): Promise<string> {
-  const base = safeFilename(w.author ? `${w.title} - ${w.author}` : w.title);
+  const base = nameSegment(w.author ? `${w.title} - ${w.author}` : w.title);
   const st = await fs.lstat(sourcePath);
   return st.isDirectory() ? base : `${base}${extname(sourcePath)}`;
 }

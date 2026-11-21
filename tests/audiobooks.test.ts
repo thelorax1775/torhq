@@ -218,8 +218,8 @@ describe("audiobooks flow: request -> grab -> download -> preview -> approve -> 
     setWantedDepsForTest({ qb: () => qb as any, approvedRoots: [root] });
   });
 
-  async function request(): Promise<string> {
-    const r = await post("/api/audiobooks/request", memberCookie, memberCsrf, { title: "Dune", author: "Frank Herbert", externalId: "OL1W" });
+  async function request(title = "Dune", author = "Frank Herbert", externalId = "OL1W"): Promise<string> {
+    const r = await post("/api/audiobooks/request", memberCookie, memberCsrf, { title, author, externalId });
     expect(r.statusCode).toBe(200);
     return r.json().item.id;
   }
@@ -351,6 +351,19 @@ describe("audiobooks flow: request -> grab -> download -> preview -> approve -> 
     const dest = JSON.parse(getWanted(id)!.previewJson!).destPath as string;
     expect(dest.startsWith(join(root, "library/audiobooks") + "/")).toBe(true);
     expect(dest).not.toContain("..");
+  });
+
+  it("an author with a slash keeps the whole name (slashes become underscores)", async () => {
+    const id = await request("Live", "AC/DC");
+    await grab(id);
+    const dir = join(root, "downloads/torhq-audiobooks", "Live");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "a.m4b"), "x");
+    torrents = [{ hash: "a".repeat(40), name: "Live", category: "torhq-audiobooks", state: "stalledUP", progress: 1,
+      savePath: join(root, "downloads/torhq-audiobooks"), contentPath: dir, tags: [tagFor(id)], addedOn: 1 }];
+    await reconcile();
+    const dest = JSON.parse(getWanted(id)!.previewJson!).destPath as string;
+    expect(dest).toBe(join(root, "library/audiobooks/AC_DC/Live"));
   });
 
   it("status reports what is missing", async () => {

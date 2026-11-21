@@ -190,8 +190,8 @@ describe("books flow: request -> grab -> download -> preview -> approve", () => 
     setWantedDepsForTest({ qb: () => qb as any, approvedRoots: [root] });
   });
 
-  async function request(): Promise<string> {
-    const r = await post("/api/books/request", memberCookie, memberCsrf, { title: "Dune", author: "Frank Herbert", externalId: "OL1W" });
+  async function request(title = "Dune", author = "Frank Herbert", externalId = "OL1W"): Promise<string> {
+    const r = await post("/api/books/request", memberCookie, memberCsrf, { title, author, externalId });
     expect(r.statusCode).toBe(200);
     return r.json().item.id;
   }
@@ -370,6 +370,20 @@ describe("books flow: request -> grab -> download -> preview -> approve", () => 
     const id = await request();
     expect((await post(`/api/books/wanted/${id}/decline`, adminCookie, adminCsrf)).statusCode).toBe(200);
     expect(getWanted(id)!.status).toBe("declined");
+  });
+
+  it("a title with a slash keeps the whole name (slashes become underscores)", async () => {
+    const id = await request("Either/Or", "Kierkegaard");
+    await grab(id);
+
+    const src = finishDownload(id);
+    expect((await reconcile()).ready).toBe(1);
+    const w = getWanted(id)!;
+    expect(w).toMatchObject({ status: "ready", libraryKey: "kavita-books", sourcePath: src });
+    expect(JSON.parse(w.previewJson!)).toMatchObject({
+      destPath: join(root, "library/books/Either_Or - Kierkegaard"),
+      importMode: "move",
+    });
   });
 
   describe("access", () => {
