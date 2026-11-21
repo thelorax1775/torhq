@@ -235,11 +235,12 @@ describe("deploy/updater/update-worker.mjs", () => {
     expect(s.state).toBe("failed");
     // Original error
     expect(s.message).toContain("build failed (exit 1)");
-    // Admin warning about rebuild failure
+    // Admin warning about rebuild failure - exact sentence from the card
     expect(s.message).toContain(
-      "The previous version was restored but could not be rebuilt, so TorHQ will not start after its next restart. Run npm ci and npm run build in"
+      "The previous version was restored but could not be rebuilt, so TorHQ will not start after its next restart. Run npm ci and npm run build in the app folder by hand."
     );
-    expect(s.message).toContain("by hand");
+    // Path follows the sentence
+    expect(s.message).toContain("App folder:");
   });
 
   it("apply: rollback git reset failure includes restore warning in status message", () => {

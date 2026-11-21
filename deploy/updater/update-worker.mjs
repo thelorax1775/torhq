@@ -153,7 +153,7 @@ function rollback(previous) {
       run("rollback-install", "npm", ["ci", "--include=dev", "--no-audit", "--no-fund"]);
       run("rollback-build", "npm", ["run", "build"]);
     } catch (e) {
-      const msg = `The previous version was restored but could not be rebuilt, so TorHQ will not start after its next restart. Run npm ci and npm run build in ${APP_DIR} by hand.`;
+      const msg = `The previous version was restored but could not be rebuilt, so TorHQ will not start after its next restart. Run npm ci and npm run build in the app folder by hand. App folder: ${APP_DIR}`;
       log(`rollback rebuild failed: ${e instanceof Error ? e.message : e}`);
       return msg;
     }
