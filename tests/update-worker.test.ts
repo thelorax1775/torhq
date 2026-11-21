@@ -243,122 +243,46 @@ describe("deploy/updater/update-worker.mjs", () => {
   });
 
   it("apply: rollback git reset failure includes restore warning in status message", () => {
-    // Create a setup where the app repo is a shallow clone (only has the latest commit)
-    // So when rollback tries to reset to the previous commit, it's not available
-    const root = mkdtempSync(join(tmpdir(), "torhq-uw-"));
-    roots.push(root);
-    const origin = join(root, "origin.git");
-    const seed = join(root, "seed");
-    const app = join(root, "app");
-    const data = join(root, "data");
-    const marks = join(root, "marks");
-    mkdirSync(marks);
-    mkdirSync(data);
-    mkdirSync(seed);
+    const t = setup({ buildFails: false });
+    const before = t.head();
 
-    sh(root, "git", ["init", "-q", "--bare", "-b", "main", origin]);
-    sh(seed, "git", ["init", "-q", "-b", "main"]);
-    sh(seed, "git", ["remote", "add", "origin", origin]);
-
-    // Initial commit has working build
-    const write = (rel: string, text: string) => {
-      mkdirSync(join(seed, rel, ".."), { recursive: true });
-      writeFileSync(join(seed, rel), text);
-    };
-    write("package.json", JSON.stringify({
+    // Push a commit to origin with a build that fails AND creates a stale index.lock
+    // This will cause the rollback's git reset --hard to fail
+    writeFileSync(join(t.root, "seed/package.json"), JSON.stringify({
       name: "fake-torhq", version: "1.0.0", private: true, workspaces: ["server"],
-      scripts: { build: `git rev-parse HEAD > ${marks}/build` },
+      scripts: { build: `touch ${t.app}/.git/index.lock && exit 1` },
     }));
-    write("server/package.json", JSON.stringify({
-      name: "server", version: "1.0.0", private: true,
-      scripts: { migrate: `git rev-parse HEAD > ${marks}/migrate` },
-    }));
-    write("package-lock.json", JSON.stringify({
-      name: "fake-torhq", version: "1.0.0", lockfileVersion: 3, requires: true,
-      packages: {
-        "": { name: "fake-torhq", version: "1.0.0", workspaces: ["server"] },
-        "node_modules/server": { resolved: "server", link: true },
-        server: { version: "1.0.0" },
-      },
-    }));
-    write("scripts/backup.sh", `#!/bin/bash\ngit rev-parse HEAD > ${marks}/backup\n`);
-    write("file.txt", "one\n");
-    sh(seed, "git", ["add", "-A"]);
-    sh(seed, "git", ["commit", "-q", "-m", "initial"]);
-    sh(seed, "git", ["push", "-q", "origin", "main"]);
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "add", "-A"]);
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "commit", "-q", "-m", "failing build with index lock"]);
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "push", "-q", "origin", "main"]);
 
-    // Push a second commit
-    writeFileSync(join(seed, "file.txt"), "second\n");
-    sh(seed, "git", ["add", "-A"]);
-    sh(seed, "git", ["commit", "-q", "-m", "second"]);
-    sh(seed, "git", ["push", "-q", "origin", "main"]);
+    // Run apply - build fails, rollback tries to reset but index.lock blocks it
+    const r = t.run("apply");
 
-    // Clone at the second commit (depth=1), so the initial commit is NOT in the local repo
-    sh(root, "git", ["clone", "--depth=1", "-q", "-b", "main", origin, app]);
-
-    const envFile = join(root, "torhq.env");
-    writeFileSync(envFile, `TORHQ_DATA_DIR=${data}\nTORHQ_PORT=1\n`);
-    const update = join(data, "update");
-    mkdirSync(update, { recursive: true });
-
-    const api = {
-      root, app, data, marks, envFile,
-      status: () => JSON.parse(readFileSync(join(update, "status.json"), "utf8")),
-      log: () => readFileSync(join(update, "update.log"), "utf8"),
-      mark: (n: string) => join(marks, n),
-      request: (text: string) => { mkdirSync(update, { recursive: true }); writeFileSync(join(update, "request"), text); },
-      requestPath: join(update, "request"),
-      head: (dir = app) => sh(dir, "git", ["rev-parse", "HEAD"]),
-      originHead: () => sh(root, "git", ["--git-dir", origin, "rev-parse", "main"]),
-      pushToOrigin(subject: string) {
-        writeFileSync(join(seed, "file.txt"), `${subject}\n`);
-        sh(seed, "git", ["add", "-A"]);
-        sh(seed, "git", ["commit", "-q", "-m", subject]);
-        sh(seed, "git", ["push", "-q", "origin", "main"]);
-      },
-      env: (extra: Record<string, string> = {}) => ({
-        ...process.env, ...GIT_ENV, TORHQ_APP_DIR: app, TORHQ_ENV_FILE: envFile, ...extra,
-      }),
-      run(phase: string) {
-        return spawnSync("node", [WORKER, phase], { env: api.env(), encoding: "utf8", timeout: 60_000 });
-      },
-    };
-
-    // Now push a third commit with failing build
-    api.pushToOrigin("failing build");
-
-    // Run apply - it will fetch, pull the third commit, build fails, rollback tries to reset to second
-    // but the second commit is not available (shallow clone only has the third)
-    const r = api.run("apply");
-    if (r.status !== 0) {
-      const s = api.status();
-      // The message should contain "restore" and "by hand"
-      expect(s.message).toContain("restore");
-      expect(s.message).toContain("by hand");
-    }
+    // The test MUST fail on origin/main's worker - the reset failure should be caught
+    expect(r.status).not.toBe(0);
+    const s = t.status();
+    expect(s.state).toBe("failed");
+    // Message should contain the original error, "restore", the short sha, and "by hand"
+    expect(s.message).toContain("build failed (exit 1)");
+    expect(s.message).toContain("restore");
+    // The previous commit's short sha (the one we were trying to rollback to)
+    expect(s.message).toContain(before.slice(0, 7));
+    expect(s.message).toContain("by hand");
   });
 
   it("apply: rollback succeeds fully (old version builds), no rebuild warning in message", () => {
     const t = setup({ buildFails: false });
     const before = t.head();
+
     // Push a commit to origin with build: exit 1, while initial commit builds fine
-    // We need to directly modify the seed repo and push
-    const { writeFileSync } = require("node:fs");
-    const { join } = require("node:path");
-    const { spawnSync } = require("node:child_process");
-    const GIT_ENV = {
-      GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.invalid",
-      GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.invalid",
-      GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_TERMINAL_PROMPT: "0",
-    };
-    // Change the seed's package.json to have build: exit 1
     writeFileSync(join(t.root, "seed/package.json"), JSON.stringify({
       name: "fake-torhq", version: "1.0.0", private: true, workspaces: ["server"],
       scripts: { build: "exit 1" },
     }));
-    spawnSync("git", ["add", "-A"], { cwd: join(t.root, "seed"), encoding: "utf8", env: { ...process.env, ...GIT_ENV } });
-    spawnSync("git", ["commit", "-q", "-m", "new feature"], { cwd: join(t.root, "seed"), encoding: "utf8", env: { ...process.env, ...GIT_ENV } });
-    spawnSync("git", ["push", "-q", "origin", "main"], { cwd: join(t.root, "seed"), encoding: "utf8", env: { ...process.env, ...GIT_ENV } });
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "add", "-A"]);
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "commit", "-q", "-m", "new feature"]);
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "push", "-q", "origin", "main"]);
 
     const r = t.run("apply");
     expect(r.status).not.toBe(0);
