@@ -70,4 +70,9 @@ describe("link templates", () => {
     const many = Array.from({ length: 40 }, (_, i) => `L${i}|https://e.com/?q={q}`).join("\n");
     expect(buildLinks("x", many).length).toBeLessThanOrEqual(12);
   });
+
+  it("fills every {q} placeholder in a template, not just the first", () => {
+    const links = buildLinks("dune", "Example|https://x.test/?a={q}&b={q}");
+    expect(links).toContainEqual({ label: "Example", url: "https://x.test/?a=dune&b=dune" });
+  });
 });

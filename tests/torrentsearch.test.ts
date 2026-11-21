@@ -82,6 +82,11 @@ describe("parseSize", () => {
     expect(parseSize("1 TB")).toBe(1024 ** 4);
     expect(parseSize("1,024 KiB")).toBe(1024 * 1024); // commas + binary spelling
   });
+  it("reads decimal commas and thousands separators correctly", () => {
+    expect(parseSize("1,5 GB")).toBe(Math.round(1.5 * 1024 ** 3));
+    expect(parseSize("2,25 MiB")).toBe(Math.round(2.25 * 1024 ** 2));
+    expect(parseSize("1,234,567 B")).toBe(1234567);
+  });
   it("returns null for junk", () => {
     expect(parseSize(undefined)).toBeNull();
     expect(parseSize("")).toBeNull();
