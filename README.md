@@ -250,7 +250,8 @@ land in **Audiobookshelf** (ABS). Differences from ebooks:
 - **Layout.** The preview targets the ABS library folder as **Author/Title/**
   (a folder download becomes `Author/Title`; a lone file goes inside
   `Author/Title/`). Author and title are sanitised and the destination must stay
-  inside `TORHQ_APPROVED_ROOTS`.
+  inside `TORHQ_APPROVED_ROOTS`. A slash in a title or author becomes "_"
+  (e.g. `AC/DC` -> `AC_DC`), so the whole name is kept.
 - **After approval.** The intake job moves the files, then asks ABS to scan the
   library; the item shows *Available* once ABS has it. Nothing moves, and ABS is
   not scanned, before the approval click.
