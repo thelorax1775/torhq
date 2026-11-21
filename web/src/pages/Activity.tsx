@@ -181,6 +181,11 @@ function List({ data, filter, setFilter, isAdmin, pending, focus }: {
           {data.unavailable.map((u) => `${u.source}: ${u.detail}`).join("; ")}
         </Alert>
       )}
+      {!isAdmin && data.unavailable.length > 0 && (
+        <Alert tone="warn" title="Some progress is missing">
+          Some progress information is temporarily unavailable. It will fill in once everything answers again.
+        </Alert>
+      )}
       <div className="chips toolbar" role="group" aria-label="Filter activity">
         {filters.map((f) => (
           <button key={f.id} type="button" className={cx("chip", filter === f.id && "on")} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
