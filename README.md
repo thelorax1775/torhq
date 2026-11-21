@@ -1051,8 +1051,7 @@ request; a root-owned systemd path unit (`torhq-update.path`, installed once by
 `scripts/upgrade.sh`) runs the update as the `torhq` user in the background and the
 page polls its status and log. The steps are: back up the database, `git pull
 --ff-only`, `npm ci`, build, migrate, restart. If any step fails the checkout is reset
-to the previous commit and rebuilt, the service is never restarted, so the old version
-keeps running, and the pre-update backup is kept. Data and config are never touched.
+to the previous commit and rebuilt. If that rebuild also fails, the Updates panel warns the admin and they must run `npm ci` and `npm run build` in the app folder by hand before restarting. The service is never restarted, so the old version keeps running, and the pre-update backup is kept. Data and config are never touched.
 The request is admin-only and CSRF-protected; no ref, path or command comes from the
 request.
 
