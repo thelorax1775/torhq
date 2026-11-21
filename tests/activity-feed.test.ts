@@ -27,7 +27,7 @@ const q = (over: Partial<ArrQueueItem>): ArrQueueItem => ({
 });
 const torrent = (over: Partial<QbTorrent>): QbTorrent => ({
   hash: "aaaa", name: "Dune.2021.2160p", category: "radarr", state: "downloading", progress: 0.6, dlspeed: 1, upspeed: 0,
-  size: 1000, eta: 1200, savePath: "/d", ratio: 0, addedOn: (NOW - HOUR) / 1000, tags: [], ...over,
+  size: 1000, eta: 1200, savePath: "/d", contentPath: "/d/Dune.2021.2160p", ratio: 0, addedOn: (NOW - HOUR) / 1000, tags: [], ...over,
 });
 const input = (over: Partial<FeedInput> = {}): FeedInput => ({
   now: NOW, requests: [], queue: [], library: new Map(), torrents: [], slskd: [], jobs: [], libraryKinds: new Map(), checks: [], ...over,
@@ -98,6 +98,21 @@ describe("stalls explain themselves", () => {
     const it = only(input({ queue: [q({ sizeleft: 0, status: "completed", trackedDownloadState: "importPending", added: new Date(NOW - 3 * HOUR).toISOString() })] }));
     expect(it.status).toBe("stalled");
     expect(it.stall!.reason).toMatch(/over an hour/);
+  });
+  it("measures import waiting from when the download finished, not when it was grabbed", () => {
+    const item = q({ sizeleft: 0, status: "completed", trackedDownloadState: "importPending", added: new Date(NOW - 2 * HOUR).toISOString() });
+    const recent = only(input({ queue: [item], torrents: [torrent({ progress: 1, completionOn: (NOW - 5 * 60_000) / 1000 })] }));
+    expect(recent).toMatchObject({ stage: "importing", status: "active" });
+    const old = only(input({ queue: [item], torrents: [torrent({ progress: 1, completionOn: (NOW - 2 * HOUR) / 1000 })] }));
+    expect(old.status).toBe("stalled");
+  });
+  it("measures a stalled download from its last activity, not when it was grabbed", () => {
+    const item = q({ added: new Date(NOW - 3 * HOUR).toISOString() });
+    const recent = only(input({ queue: [item], torrents: [torrent({ state: "stalledDL", eta: 8640000, lastActivity: (NOW - 2 * 60_000) / 1000 })] }));
+    expect(recent.status).toBe("active");
+    const old = only(input({ queue: [item], torrents: [torrent({ state: "stalledDL", eta: 8640000, lastActivity: (NOW - 45 * 60_000) / 1000 })] }));
+    expect(old.status).toBe("stalled");
+    expect(old.stall!.reason).toMatch(/Nobody is sharing/);
   });
   it("a download the client reports stalled for a while is a stall at downloading", () => {
     const it = only(input({ queue: [q({})], torrents: [torrent({ state: "stalledDL", eta: 8640000 })] }));
