@@ -13,6 +13,8 @@ jobs:
         node: [22, 20]
     steps:
       - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck --version && shellcheck -S warning scripts/*.sh deploy/updater/torhq-update
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
