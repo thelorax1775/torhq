@@ -226,6 +226,74 @@ describe("deploy/updater/update-worker.mjs", () => {
     expect(readFileSync(join(t.app, "file.txt"), "utf8")).toBe("one\n");
   });
 
+  it("apply: rollback rebuild failure includes admin warning in status message", () => {
+    const t = setup({ buildFails: true });
+    t.pushToOrigin("new feature");
+    const r = t.run("apply");
+    expect(r.status).not.toBe(0);
+    const s = t.status();
+    expect(s.state).toBe("failed");
+    // Original error
+    expect(s.message).toContain("build failed (exit 1)");
+    // Admin warning about rebuild failure - exact sentence from the card
+    expect(s.message).toContain(
+      "The previous version was restored but could not be rebuilt, so TorHQ will not start after its next restart. Run npm ci and npm run build in the app folder by hand."
+    );
+    // Path follows the sentence
+    expect(s.message).toContain("App folder:");
+  });
+
+  it("apply: rollback git reset failure includes restore warning in status message", () => {
+    const t = setup({ buildFails: false });
+    const before = t.head();
+
+    // Push a commit to origin with a build that fails AND creates a stale index.lock
+    // This will cause the rollback's git reset --hard to fail
+    writeFileSync(join(t.root, "seed/package.json"), JSON.stringify({
+      name: "fake-torhq", version: "1.0.0", private: true, workspaces: ["server"],
+      scripts: { build: `touch ${t.app}/.git/index.lock && exit 1` },
+    }));
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "add", "-A"]);
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "commit", "-q", "-m", "failing build with index lock"]);
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "push", "-q", "origin", "main"]);
+
+    // Run apply - build fails, rollback tries to reset but index.lock blocks it
+    const r = t.run("apply");
+
+    // The test MUST fail on origin/main's worker - the reset failure should be caught
+    expect(r.status).not.toBe(0);
+    const s = t.status();
+    expect(s.state).toBe("failed");
+    // Message should contain the original error, "restore", the short sha, and "by hand"
+    expect(s.message).toContain("build failed (exit 1)");
+    expect(s.message).toContain("restore");
+    // The previous commit's short sha (the one we were trying to rollback to)
+    expect(s.message).toContain(before.slice(0, 7));
+    expect(s.message).toContain("by hand");
+  });
+
+  it("apply: rollback succeeds fully (old version builds), no rebuild warning in message", () => {
+    const t = setup({ buildFails: false });
+    const before = t.head();
+
+    // Push a commit to origin with build: exit 1, while initial commit builds fine
+    writeFileSync(join(t.root, "seed/package.json"), JSON.stringify({
+      name: "fake-torhq", version: "1.0.0", private: true, workspaces: ["server"],
+      scripts: { build: "exit 1" },
+    }));
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "add", "-A"]);
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "commit", "-q", "-m", "new feature"]);
+    sh(t.root, "git", ["-C", join(t.root, "seed"), "push", "-q", "origin", "main"]);
+
+    const r = t.run("apply");
+    expect(r.status).not.toBe(0);
+    expect(t.head()).toBe(before);
+    const s = t.status();
+    expect(s.state).toBe("failed");
+    // Should NOT contain the rebuild warning
+    expect(s.message).not.toContain("could not be rebuilt");
+  });
+
   it("check/apply: GitHub unreachable reports it plainly and changes nothing", () => {
     const t = setup();
     const before = t.head();

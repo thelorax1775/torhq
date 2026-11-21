@@ -143,6 +143,7 @@ function summary(rev) {
  * A step failed after the pull: put the previous commit back (the running service was never
  * restarted, so it is still the old version) and best-effort rebuild it so a later restart
  * starts the old version too. The backup taken before the pull is left untouched.
+ * Returns an empty string on full success, otherwise a warning message for the admin.
  */
 function rollback(previous) {
   try {
@@ -152,11 +153,17 @@ function rollback(previous) {
       run("rollback-install", "npm", ["ci", "--include=dev", "--no-audit", "--no-fund"]);
       run("rollback-build", "npm", ["run", "build"]);
     } catch (e) {
+      const msg = `The previous version was restored but could not be rebuilt, so TorHQ will not start after its next restart. Run npm ci and npm run build in the app folder by hand. App folder: ${APP_DIR}`;
       log(`rollback rebuild failed: ${e instanceof Error ? e.message : e}`);
+      return msg;
     }
     writeStatus({ current: headCommit() });
+    return "";
   } catch (e) {
+    const shortSha = previous.slice(0, 7);
+    const msg = `Git reset failed; restore ${shortSha} by hand.`;
     log(`rollback failed: ${e instanceof Error ? e.message : e} — restore ${previous} by hand`);
+    return msg;
   }
 }
 
@@ -195,7 +202,10 @@ function apply() {
     run("build", "npm", ["run", "build"]);
     run("migrate", "npm", ["run", "migrate", "--workspace", "server"], fileEnv);
   } catch (e) {
-    rollback(previous);
+    const rollbackMsg = rollback(previous);
+    if (rollbackMsg) {
+      throw new Error(`${e instanceof Error ? e.message : String(e)}\n${rollbackMsg}`);
+    }
     throw e;
   }
   writeStatus({ state: "restarting", step: "restart", current: headCommit(), behind: 0, commits: [] });
