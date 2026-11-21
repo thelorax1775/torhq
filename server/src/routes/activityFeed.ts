@@ -12,6 +12,7 @@ import { buildPipelineChecks, type ArrSnapshot, type QbSnapshot } from "../lib/p
 import { getDb } from "../db/index.js";
 import { libraries } from "../db/schema.js";
 import { listJobs } from "../queue/queue.js";
+import { listWanted } from "../lib/wanted.js";
 import type { AppContext } from "../lib/context.js";
 import { ARR_SERVICES } from "./downloads.js";
 
@@ -126,10 +127,13 @@ export function activityFeedRoutes(app: FastifyInstance, ctx: AppContext): void 
       checks = buildPipelineChecks({ qb: qbSnap, arrs: arrSnaps, now });
     }
 
+    // Book and audiobook requests live outside every *arr; the feed filters them per viewer.
+    const wanted = listWanted().filter((w) => w.createdAt >= now - WINDOW_MS);
+
     const items = buildFeed({
       now, requests, queue, library, torrents, slskd,
       jobs: jobs.map((j) => ({ id: j.id, status: j.status, sourcePath: j.sourcePath, libraryKey: j.libraryKey, lastError: j.lastError, createdAt: j.createdAt })),
-      libraryKinds, checks,
+      wanted, libraryKinds, checks,
     }, viewer).slice(0, limit);
     return { items, unavailable: viewer.isAdmin ? unavailable : [] };
   });

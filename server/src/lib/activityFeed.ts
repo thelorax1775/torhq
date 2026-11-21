@@ -57,6 +57,20 @@ export interface FeedJob {
   createdAt: number;
 }
 
+/** A book or audiobook request (a `wanted_items` row), as the feed needs it. */
+export interface FeedWanted {
+  id: string;
+  kind: string;
+  title: string;
+  author: string | null;
+  status: string;
+  requestedBy: string;
+  torrentHash: string | null;
+  jobId: string | null;
+  error: string | null;
+  createdAt: number;
+}
+
 export interface FeedInput {
   now: number;
   requests: FeedRequest[];
@@ -66,6 +80,8 @@ export interface FeedInput {
   torrents: QbTorrent[];
   slskd: Array<{ username: string; files: Array<{ filename: string; state: string; percentComplete: number }> }>;
   jobs: FeedJob[];
+  /** Book and audiobook requests; declined ones are not shown. */
+  wanted: FeedWanted[];
   /** Intake library key -> its kind (books, manga, comics, music). */
   libraryKinds: Map<string, string>;
   /** Pipeline health; only used to give an admin the real cause of a stall. */
@@ -286,6 +302,10 @@ export function buildFeed(input: FeedInput, viewer: Viewer): FeedItem[] {
   }
 
   const claimedHashes = new Set<string>();
+  // Book and audiobook requests (step 5) own the torrent and intake job they point at.
+  const wanted = input.wanted.filter((w) => w.status !== "declined");
+  for (const w of wanted) if (w.torrentHash) claimedHashes.add(w.torrentHash.toLowerCase());
+  const wantedJobs = new Set(wanted.flatMap((w) => (w.jobId ? [w.jobId] : [])));
   for (const [key, group] of groups) {
     const req = requests.get(key);
     const first = group[0]!;
@@ -379,6 +399,7 @@ export function buildFeed(input: FeedInput, viewer: Viewer): FeedItem[] {
       });
     }
     for (const j of input.jobs) {
+      if (wantedJobs.has(j.id)) continue;
       const k = input.libraryKinds.get(j.libraryKey ?? "") ?? "";
       const status = j.status === "completed" ? "done" : j.status === "failed" || j.status === "dead" ? "stalled" : "active";
       items.set(`job:${j.id}`, {
@@ -396,7 +417,41 @@ export function buildFeed(input: FeedInput, viewer: Viewer): FeedItem[] {
     }
   }
 
+  // 5. Book and audiobook requests: visible to their requester, and to the admin.
+  for (const w of wanted) {
+    const id = `wanted:${w.id}`;
+    items.set(id, wantedItem(w, id, torrentByHash));
+  }
+
   return finish([...items.values()], viewer);
+}
+
+function wantedItem(w: FeedWanted, id: string, torrents: Map<string, QbTorrent>): FeedItem {
+  const audio = w.kind === "audiobook";
+  const page = audio ? "/audiobooks" : "/books";
+  const torrent = w.torrentHash ? torrents.get(w.torrentHash.toLowerCase()) : undefined;
+  const r: { stage: FeedStage; status: FeedStatus; progress: number; stall?: Stall } = (() => {
+    switch (w.status) {
+      case "grabbed": return { stage: "downloading", status: "active", progress: torrent ? pct(torrent.progress) : 0 };
+      case "ready": return { stage: "importing", status: "stalled", progress: 100, stall: {
+        reason: "Waiting for the admin to approve the import.",
+        fix: `Open ${audio ? "Audiobooks" : "Books"} and approve the preview.`,
+      } };
+      case "importing": return { stage: "importing", status: "active", progress: 100 };
+      case "imported": return { stage: "available", status: "done", progress: 100 };
+      case "failed": return { stage: "downloading", status: "stalled", progress: 0, stall: {
+        reason: "The download or import failed.",
+        fix: `Open ${audio ? "Audiobooks" : "Books"} to see what went wrong, then request it again or pick another release.`,
+        detail: w.error ?? undefined,
+      } };
+      default: return { stage: "requested", status: "active", progress: 0 };
+    }
+  })();
+  return {
+    id, kind: audio ? "audiobook" : "book", title: w.title, subtitle: w.author ?? undefined, artwork: null,
+    stage: r.stage, status: r.status, progress: r.progress, etaSeconds: null,
+    startedAt: w.createdAt, requestedBy: w.requestedBy, source: "job", stall: r.stall, href: page,
+  };
 }
 
 /** The member-facing wording for a stall that carries no operational detail. */

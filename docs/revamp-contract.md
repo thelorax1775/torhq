@@ -136,6 +136,14 @@ restricted to the existing allowlist plus categories qBittorrent already has.
   "unavailable": [{ "source": "radarr", "detail": "…" }] }   // admin only
 ```
 
+Book and audiobook requests (`wanted_items`, last 7 days, not declined) are items
+too: `id` `wanted:<id>`, `kind` `book` | `audiobook`, `subtitle` the author, `source`
+`job`, `href` `/books` | `/audiobooks`. `requested` -> requested; `grabbed` ->
+downloading (torrent progress); `ready` -> importing, stalled until the admin approves
+the preview; `importing` -> importing; `imported` -> available; `failed` -> downloading,
+stalled, `detail` the error. The intake job and torrent a request owns are not listed
+a second time. A member sees only their own.
+
 Admin: everything, including raw qBittorrent/slskd downloads and intake jobs the
 *arr do not know about. Member: their own requests, plus other people's *in-flight*
 items as generic progress (no requester, no `href`, no `detail`, and a stall `fix`

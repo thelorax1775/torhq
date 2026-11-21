@@ -8,9 +8,10 @@ import { runMigrations } from "../server/src/db/migrate.js";
 import { loadEnv } from "../server/src/config/env.js";
 import { makeContext } from "../server/src/lib/context.js";
 import { buildApp } from "../server/src/app.js";
+import { createWanted } from "../server/src/lib/wanted.js";
 import { logActivity } from "../server/src/lib/activity.js";
 import { setFeedSourcesForTest, type FeedSources } from "../server/src/routes/activityFeed.js";
-import { buildFeed, type FeedInput } from "../server/src/lib/activityFeed.js";
+import { buildFeed, type FeedInput, type FeedWanted } from "../server/src/lib/activityFeed.js";
 import type { ArrQueueItem } from "../server/src/adapters/arr.js";
 import type { QbTorrent } from "../server/src/adapters/qbittorrent.js";
 import type { PipelineCheck } from "../server/src/lib/pipeline.js";
@@ -30,7 +31,7 @@ const torrent = (over: Partial<QbTorrent>): QbTorrent => ({
   size: 1000, eta: 1200, savePath: "/d", contentPath: "/d/Dune.2021.2160p", ratio: 0, addedOn: (NOW - HOUR) / 1000, tags: [], ...over,
 });
 const input = (over: Partial<FeedInput> = {}): FeedInput => ({
-  now: NOW, requests: [], queue: [], library: new Map(), torrents: [], slskd: [], jobs: [], libraryKinds: new Map(), checks: [], ...over,
+  now: NOW, requests: [], queue: [], library: new Map(), torrents: [], slskd: [], jobs: [], wanted: [], libraryKinds: new Map(), checks: [], ...over,
 });
 const req = (over = {}) => ({ service: "radarr" as const, id: 7, title: "Dune", by: "sam", at: NOW - 2 * HOUR, searched: true, ...over });
 const only = (i: FeedInput, v = admin) => { const f = buildFeed(i, v); expect(f).toHaveLength(1); return f[0]!; };
@@ -131,6 +132,65 @@ describe("stalls explain themselves", () => {
   it("an admin add that never started a search stalls once it is old enough", () => {
     const it = only(input({ requests: [req({ searched: false, at: NOW - HOUR, by: "admin" })] }));
     expect(it).toMatchObject({ stage: "requested", status: "stalled" });
+  });
+});
+
+const wantedRow = (over: Partial<FeedWanted> = {}): FeedWanted => ({
+  id: "w1", kind: "book", title: "Piranesi", author: "Susanna Clarke", status: "requested", requestedBy: "sam",
+  torrentHash: null, jobId: null, error: null, createdAt: NOW - HOUR, ...over,
+});
+
+describe("book and audiobook requests", () => {
+  const one = (w: Partial<FeedWanted>, extra: Partial<FeedInput> = {}, v = admin) => only(input({ wanted: [wantedRow(w)], ...extra }), v);
+  it("shows a request as a book item with its author, requester and page", () => {
+    expect(one({})).toMatchObject({
+      id: "wanted:w1", kind: "book", title: "Piranesi", subtitle: "Susanna Clarke", source: "job",
+      requestedBy: "sam", startedAt: NOW - HOUR, href: "/books", stage: "requested", status: "active",
+    });
+    expect(one({ kind: "audiobook" })).toMatchObject({ kind: "audiobook", href: "/audiobooks" });
+  });
+  it("maps grabbed to downloading with the torrent's progress, or 0 without one", () => {
+    expect(one({ status: "grabbed" })).toMatchObject({ stage: "downloading", status: "active", progress: 0 });
+    const it = one({ status: "grabbed", torrentHash: "AAAA" }, { torrents: [torrent({ progress: 0.4 })] });
+    expect(it).toMatchObject({ stage: "downloading", status: "active", progress: 40 });
+  });
+  it("maps ready to an importing stall waiting for the admin", () => {
+    expect(one({ status: "ready" })).toMatchObject({ stage: "importing", status: "stalled", stall: {
+      reason: "Waiting for the admin to approve the import.", fix: "Open Books and approve the preview." } });
+    expect(one({ status: "ready", kind: "audiobook" }).stall!.fix).toBe("Open Audiobooks and approve the preview.");
+  });
+  it("maps importing to active, imported to available and failed to a downloading stall with the error", () => {
+    expect(one({ status: "importing" })).toMatchObject({ stage: "importing", status: "active" });
+    expect(one({ status: "imported" })).toMatchObject({ stage: "available", status: "done", progress: 100 });
+    expect(one({ status: "failed", error: "no seeders" })).toMatchObject({ stage: "downloading", status: "stalled", stall: {
+      reason: "The download or import failed.", detail: "no seeders" } });
+  });
+  it("does not show declined requests", () => {
+    expect(buildFeed(input({ wanted: [wantedRow({ status: "declined" })] }), admin)).toEqual([]);
+  });
+  it("does not list an intake job a request already owns, but still lists other jobs", () => {
+    const job = (id: string) => ({ id, status: "running", sourcePath: "/staging/x.epub", libraryKey: "k", lastError: null, createdAt: NOW - HOUR });
+    const feed = buildFeed(input({
+      wanted: [wantedRow({ status: "importing", jobId: "j1" })], jobs: [job("j1"), job("j2")], libraryKinds: new Map([["k", "books"]]),
+    }), admin);
+    expect(feed.map((i) => i.id).sort()).toEqual(["job:j2", "wanted:w1"]);
+  });
+  it("does not list a torrent a request claimed as an unmatched download", () => {
+    const t = torrent({ hash: "aaaa", category: "torhq-books", progress: 0.3 });
+    const feed = buildFeed(input({ wanted: [wantedRow({ status: "grabbed", torrentHash: "AAAA" })], torrents: [t, torrent({ hash: "bbbb", category: "torhq-games" })] }), admin);
+    expect(feed.map((i) => i.id).sort()).toEqual(["torrent:bbbb", "wanted:w1"]);
+  });
+  it("shows a member their own request without hrefs or paths, and hides other members'", () => {
+    const wanted = [
+      wantedRow({ status: "failed", error: "cannot write /srv/books/x" }),
+      wantedRow({ id: "w2", title: "Secret Book", requestedBy: "alex", status: "grabbed" }),
+    ];
+    const feed = buildFeed(input({ wanted }), sam);
+    expect(feed.map((i) => i.title)).toEqual(["Piranesi"]);
+    expect(feed[0]).not.toHaveProperty("href");
+    expect(feed[0]!.stall).toEqual({ reason: "The download or import failed.", fix: expect.any(String) });
+    const json = JSON.stringify(feed);
+    for (const leak of ["/srv", "/books", "alex", "Secret", "detail"]) expect(json, leak).not.toContain(leak);
   });
 });
 
@@ -242,6 +302,17 @@ describe("GET /api/activity", () => {
     expect(r.statusCode).toBe(200);
     expect(r.json().unavailable).toEqual([{ source: "radarr", detail: "radarr down" }]);
     setFeedSourcesForTest(sources());
+  });
+  it("shows a book request to its member and to the admin", async () => {
+    createWanted({ title: "Piranesi", author: "Susanna Clarke", requestedBy: "sam" });
+    createWanted({ kind: "audiobook", title: "Dune", author: "Frank Herbert", requestedBy: "alex" });
+    const mine = (await app.inject({ method: "GET", url: "/api/activity", headers: { cookie: memberCookie } })).json().items as any[];
+    expect(mine.find((i) => i.title === "Piranesi")).toMatchObject({ kind: "book", stage: "requested", requestedBy: "sam", source: "job" });
+    expect(mine.find((i) => i.kind === "audiobook")).toBeUndefined();
+    expect(JSON.stringify(mine)).not.toMatch(/href|alex/);
+    const all = (await app.inject({ method: "GET", url: "/api/activity", headers: { cookie: adminCookie } })).json().items as any[];
+    expect(all.find((i) => i.title === "Piranesi")).toMatchObject({ kind: "book", requestedBy: "sam", href: "/books" });
+    expect(all.find((i) => i.kind === "audiobook")).toMatchObject({ requestedBy: "alex", href: "/audiobooks" });
   });
   it("the raw audit log moved to /api/activity/log and is admin-only", async () => {
     expect((await app.inject({ method: "GET", url: "/api/activity/log", headers: { cookie: memberCookie } })).statusCode).toBe(403);
