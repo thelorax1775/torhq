@@ -27,6 +27,18 @@ export interface QbTorrent {
   ratio: number;
   /** Unix seconds, as qBittorrent reports it. */
   addedOn: number;
+  /**
+   * Unix seconds when the download completed; 0 while it is incomplete.
+   * `completion_on` from /api/v2/torrents/info, which qBittorrent reports as
+   * 0 or negative until the torrent finishes.
+   */
+  completionOn?: number;
+  /**
+   * Unix seconds of the torrent's last activity (any transfer or tracker
+   * traffic); 0 when missing or non-positive, as `last_activity` from
+   * /api/v2/torrents/info can be.
+   */
+  lastActivity?: number;
   tags: string[];
 }
 
@@ -82,6 +94,8 @@ export class QbittorrentAdapter implements ServiceAdapter {
       hash: t.hash, name: t.name, category: t.category, state: t.state,
       progress: t.progress, dlspeed: t.dlspeed, upspeed: t.upspeed, size: t.size, eta: t.eta,
       savePath: t.save_path ?? "", contentPath: t.content_path ?? "", ratio: t.ratio ?? 0, addedOn: t.added_on ?? 0,
+      completionOn: t.completion_on > 0 ? t.completion_on : 0,
+      lastActivity: t.last_activity > 0 ? t.last_activity : 0,
       // `tags` is a comma-separated string on the wire; an empty string means none.
       tags: String(t.tags ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     }));

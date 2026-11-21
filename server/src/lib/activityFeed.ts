@@ -218,7 +218,11 @@ function classifyQueueItem(
     return { stage: "importing", eta: null, stall: cause ? { ...base, reason: cause.detail, fix: cause.fix!, detail: base.detail } : base };
   }
   if (state === "importpending" || state === "importing" || state === "imported") {
-    const stuck = state === "importpending" && Number.isFinite(startedAt) && input.now - startedAt > STUCK_IMPORT_MS;
+    // "Waiting to import" is measured from when the download FINISHED, not
+    // when it was grabbed: a two-hour download that completed a minute ago is
+    // not an hour stuck in import.
+    const waitingSince = torrent?.completionOn && torrent.completionOn > 0 ? torrent.completionOn * 1000 : startedAt;
+    const stuck = state === "importpending" && Number.isFinite(waitingSince) && input.now - waitingSince > STUCK_IMPORT_MS;
     if (!stuck) return { stage: "importing", eta: null };
     return { stage: "importing", eta: null, stall: cause
       ? { reason: cause.detail, fix: cause.fix! }
@@ -238,11 +242,17 @@ function classifyQueueItem(
     if (tstate === "pausedDL" || tstate === "stoppedDL") {
       return { stage: "downloading", eta, stall: { reason: "This download is paused.", fix: "Open Transfers and resume it." } };
     }
-    if (tstate === "stalledDL" && Number.isFinite(startedAt) && input.now - startedAt > TORRENT_STALL_MS) {
-      return { stage: "downloading", eta, stall: {
-        reason: "Nobody is sharing this one right now, so it is not moving.",
-        fix: `Give it time, or open Transfers and remove it with "blocklist" ticked so ${name} picks another release.`,
-      } };
+    if (tstate === "stalledDL") {
+      // "Not moving" is measured from the torrent's last activity, not from
+      // when it was added: a torrent that downloaded for hours and only went
+      // quiet a minute ago is not a stall.
+      const lastMove = torrent.lastActivity && torrent.lastActivity > 0 ? torrent.lastActivity * 1000 : startedAt;
+      if (Number.isFinite(lastMove) && input.now - lastMove > TORRENT_STALL_MS) {
+        return { stage: "downloading", eta, stall: {
+          reason: "Nobody is sharing this one right now, so it is not moving.",
+          fix: `Give it time, or open Transfers and remove it with "blocklist" ticked so ${name} picks another release.`,
+        } };
+      }
     }
   }
   if (status === "paused") {

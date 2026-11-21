@@ -360,19 +360,20 @@ function stuckImportCheck(arr: ArrSnapshot, name: string, qb: QbSnapshot, now: n
 }
 
 /**
- * When the item entered the pipeline, in epoch ms. Current *arr builds report
- * `added`; older ones do not, so fall back to qBittorrent's own added-on for the
- * matching torrent. Returns null when neither is known — an item of unknown age
- * is never reported as stuck.
+ * When the item's download finished, in epoch ms: qBittorrent's
+ * `completion_on` for the matching torrent when it is known (the *arr's `added`
+ * is the GRAB time, and a long download must not count as stuck the moment it
+ * finishes). Falls back to when the item entered the pipeline; returns null
+ * when neither is known — an item of unknown age is never reported as stuck.
  */
 function itemStartedAt(item: ArrQueueItem, qb: QbSnapshot): number | null {
+  const hash = item.downloadId?.toLowerCase();
+  const torrent = hash ? qb.torrents?.find((t) => t.hash.toLowerCase() === hash) : undefined;
+  if (torrent?.completionOn && torrent.completionOn > 0) return torrent.completionOn * 1000;
   if (item.added) {
     const t = Date.parse(item.added);
     if (!Number.isNaN(t)) return t;
   }
-  const hash = item.downloadId?.toLowerCase();
-  if (!hash) return null;
-  const torrent = qb.torrents?.find((t) => t.hash.toLowerCase() === hash);
   return torrent?.addedOn ? torrent.addedOn * 1000 : null;
 }
 

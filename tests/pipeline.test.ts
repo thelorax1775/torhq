@@ -225,6 +225,20 @@ describe("stuck imports", () => {
     expect(check.detail).toContain("Some Movie");
   });
 
+  it("measures import waiting from when the download finished, not when it was grabbed", () => {
+    const imported = item({ downloadId: "AAAA" });
+    const recent = run(healthy("radarr", { queue: [imported] }), {
+      ...QB,
+      torrents: [{ hash: "aaaa", name: "Some Movie", category: "radarr", state: "uploading", progress: 1, dlspeed: 0, upspeed: 1, size: 100, eta: 0, savePath: "/mnt/torrents/radarr", contentPath: "/mnt/torrents/radarr/Some Movie", ratio: 1, addedOn: (NOW - 3 * STUCK_IMPORT_MS) / 1000, tags: [], completionOn: (NOW - 5 * 60_000) / 1000 }],
+    });
+    expect(find(recent, "radarr-stuck-imports").ok).toBe(true);
+    const old = run(healthy("radarr", { queue: [imported] }), {
+      ...QB,
+      torrents: [{ hash: "aaaa", name: "Some Movie", category: "radarr", state: "uploading", progress: 1, dlspeed: 0, upspeed: 1, size: 100, eta: 0, savePath: "/mnt/torrents/radarr", contentPath: "/mnt/torrents/radarr/Some Movie", ratio: 1, addedOn: (NOW - 3 * STUCK_IMPORT_MS) / 1000, tags: [], completionOn: (NOW - 2 * STUCK_IMPORT_MS) / 1000 }],
+    });
+    expect(find(old, "radarr-stuck-imports").ok).toBe(false);
+  });
+
   it("leaves a recent import alone", () => {
     const recent = item({ added: new Date(NOW - 60_000).toISOString() });
     expect(find(run(healthy("radarr", { queue: [recent] })), "radarr-stuck-imports").ok).toBe(true);
