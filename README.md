@@ -803,7 +803,10 @@ requested → searching → downloading → importing → available, with a stag
 stepper, a progress bar and ETA, and who asked. When something stalls it says
 why in plain words and what to do (an import the \*arr refused, a download nobody
 is sharing, a search that found nothing for hours, a download folder the \*arr
-cannot see). Filter by in progress, stalled or done; it refreshes itself. Members
+cannot see). Filter by in progress, stalled or done; it refreshes itself. Book and audiobook
+requests show up here too (they live outside Radarr/Sonarr/Lidarr): requested →
+downloading → importing (waiting for the admin's approval of the import preview
+is shown as a stall) → available, and a failed grab says so. Members
 see their own requests plus other people's in-flight items as generic progress;
 the admin sees everything, and each row links to Transfers or History for the
 detail.

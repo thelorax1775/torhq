@@ -32,7 +32,7 @@ const torrent = (over: Partial<QbTorrent>): QbTorrent => ({
   size: 1000, eta: 1200, savePath: "/d", ratio: 0, addedOn: (NOW - HOUR) / 1000, tags: [], ...over,
 });
 const input = (over: Partial<FeedInput> = {}): FeedInput => ({
-  now: NOW, requests: [], queue: [], library: new Map(), torrents: [], slskd: [], jobs: [], libraryKinds: new Map(), checks: [], ...over,
+  now: NOW, requests: [], queue: [], library: new Map(), torrents: [], slskd: [], jobs: [], wanted: [], libraryKinds: new Map(), checks: [], ...over,
 });
 
 /** Every stall the feed can raise for an admin, one scenario per branch. */
