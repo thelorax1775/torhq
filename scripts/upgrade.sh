@@ -39,7 +39,10 @@ npm run build
 # skip": every upgrade silently skipped them, and the failure would only surface
 # as a broken app the first time a release actually changed the schema.
 if [[ -r "${ENV_FILE}" ]]; then
-  set -a; . "${ENV_FILE}"; set +a
+  set -a
+  # shellcheck source=/dev/null
+  . "${ENV_FILE}"
+  set +a
 else
   echo "warning: ${ENV_FILE} not readable — migrations will use the ambient environment" >&2
 fi
