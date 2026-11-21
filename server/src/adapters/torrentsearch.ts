@@ -317,10 +317,13 @@ const SIZE_UNITS: Record<string, number> = {
   b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3, tb: 1024 ** 4,
 };
 
-/** Parse "1.7 GB", "700 MB", "1,024 KiB" → bytes. */
+/** Parse "1.7 GB", "700 MB", "1,024 KiB", "1,5 GB" → bytes. */
 export function parseSize(text: string | undefined): number | null {
   if (!text) return null;
-  const m = text.replace(/,/g, "").match(/([\d.]+)\s*([KMGT]?i?B)/i);
+  // A comma before exactly three digits is a thousands separator; any other
+  // comma between digits is a decimal point (e.g. European "1,5 GB").
+  const normalized = text.replace(/,(?=\d{3}(?!\d))/g, "").replace(/(\d),(\d)/g, "$1.$2");
+  const m = normalized.match(/([\d.]+)\s*([KMGT]?i?B)/i);
   if (!m) return null;
   const value = parseFloat(m[1]!);
   const unit = m[2]!.toLowerCase().replace("i", ""); // KiB -> kb

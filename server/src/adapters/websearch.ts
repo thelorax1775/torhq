@@ -189,7 +189,7 @@ export class WebSearchAdapter implements ServiceAdapter {
  */
 export function buildLinks(query: string, templates?: string | null): WebLink[] {
   const q = encodeURIComponent(query.trim());
-  const links: WebLink[] = [{ label: "Google", url: GOOGLE_LINK_TEMPLATE.replace("{q}", q) }];
+  const links: WebLink[] = [{ label: "Google", url: GOOGLE_LINK_TEMPLATE.replaceAll("{q}", q) }];
   for (const line of (templates ?? "").split(/\r?\n/)) {
     if (links.length >= MAX_LINK_TEMPLATES) break;
     const sep = line.indexOf("|");
@@ -197,7 +197,7 @@ export function buildLinks(query: string, templates?: string | null): WebLink[] 
     const label = line.slice(0, sep).trim();
     const template = line.slice(sep + 1).trim();
     if (!label || !template) continue;
-    const url = template.replace("{q}", q);
+    const url = template.replaceAll("{q}", q);
     try {
       const parsed = new URL(url);
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
