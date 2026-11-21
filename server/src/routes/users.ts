@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "../db/index.js";
 import { users } from "../db/schema.js";
@@ -31,7 +31,7 @@ export function userRoutes(app: FastifyInstance, ctx: AppContext): void {
   // by adminExists(). This route can never create a second admin.
   app.post("/api/users", guard, async (req, reply) => {
     const body = CreateUser.parse(req.body);
-    const existing = getDb().select().from(users).where(eq(users.username, body.username)).get();
+    const existing = getDb().select().from(users).where(sql`lower(${users.username}) = lower(${body.username})`).get();
     if (existing) return reply.code(409).send({ error: `username ${body.username} already exists` });
     const passwordHash = await hashPassword(body.password);
     getDb().insert(users).values({ username: body.username, passwordHash, role: "member" }).run();

@@ -83,6 +83,24 @@ describe("user management", () => {
     expect(r.statusCode).toBe(409);
   });
 
+  it("refuses a username that differs only in case", async () => {
+    const r = await app.inject({
+      method: "POST", url: "/api/users",
+      headers: { cookie: adminCookie, "x-csrf-token": adminCsrf },
+      payload: { username: "SAM", password: "anotherpass1" },
+    });
+    expect(r.statusCode).toBe(409);
+  });
+
+  it("allows a genuinely different username", async () => {
+    const r = await app.inject({
+      method: "POST", url: "/api/users",
+      headers: { cookie: adminCookie, "x-csrf-token": adminCsrf },
+      payload: { username: "samantha", password: "anotherpass1" },
+    });
+    expect(r.statusCode).toBe(200);
+  });
+
   it("lists accounts without ever including a password hash", async () => {
     const r = await app.inject({ method: "GET", url: "/api/users", headers: { cookie: adminCookie } });
     expect(r.statusCode).toBe(200);
