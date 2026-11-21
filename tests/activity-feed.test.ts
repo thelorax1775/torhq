@@ -303,6 +303,18 @@ describe("GET /api/activity", () => {
     expect(r.json().unavailable).toEqual([{ source: "radarr", detail: "radarr down" }]);
     setFeedSourcesForTest(sources());
   });
+  it("tells a member in plain words when part of their list could not be loaded, without service names", async () => {
+    setFeedSourcesForTest(sources({ failRadarr: true }));
+    const r = await app.inject({ method: "GET", url: "/api/activity", headers: { cookie: memberCookie } });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().unavailable).toEqual([{ source: "progress", detail: "Some progress information is temporarily unavailable." }]);
+    expect(JSON.stringify(r.json().unavailable)).not.toMatch(/radarr/i);
+    const a = await app.inject({ method: "GET", url: "/api/activity", headers: { cookie: adminCookie } });
+    expect(a.json().unavailable).toEqual([{ source: "radarr", detail: "radarr down" }]);
+    setFeedSourcesForTest(sources());
+    const ok = await app.inject({ method: "GET", url: "/api/activity", headers: { cookie: memberCookie } });
+    expect(ok.json().unavailable).toEqual([]);
+  });
   it("shows a book request to its member and to the admin", async () => {
     createWanted({ title: "Piranesi", author: "Susanna Clarke", requestedBy: "sam" });
     createWanted({ kind: "audiobook", title: "Dune", author: "Frank Herbert", requestedBy: "alex" });

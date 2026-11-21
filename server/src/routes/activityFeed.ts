@@ -135,7 +135,13 @@ export function activityFeedRoutes(app: FastifyInstance, ctx: AppContext): void 
       jobs: jobs.map((j) => ({ id: j.id, status: j.status, sourcePath: j.sourcePath, libraryKey: j.libraryKey, lastError: j.lastError, createdAt: j.createdAt })),
       wanted, libraryKinds, checks,
     }, viewer).slice(0, limit);
-    return { items, unavailable: viewer.isAdmin ? unavailable : [] };
+    // A member is told, in plain words, that part of the list could not be
+    // fetched; the failing service names and error text (which can carry hosts
+    // or paths) stay with the admin.
+    const memberUnavailable = unavailable.length > 0
+      ? [{ source: "progress", detail: "Some progress information is temporarily unavailable." }]
+      : [];
+    return { items, unavailable: viewer.isAdmin ? unavailable : memberUnavailable };
   });
 
   // The raw append-only audit log (what /api/activity used to return). Admin

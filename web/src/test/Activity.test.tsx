@@ -105,6 +105,21 @@ describe("Activity page", () => {
     await screen.findByText("Dune");
     expect(api.called("GET /api/activity")).toHaveLength(1);
   });
+
+  it("shows the generic missing-progress alert for a member when unavailable is non-empty", async () => {
+    mockApi(feed([item({})], [{ source: "progress", detail: "Some progress information is temporarily unavailable." }]));
+    renderActivity("member");
+    await screen.findByText("Some progress is missing");
+    expect(screen.getByText(/Some progress information is temporarily unavailable/)).toBeInTheDocument();
+    expect(screen.getByText(/It will fill in once everything answers again/)).toBeInTheDocument();
+  });
+
+  it("shows the source-specific alert for an admin when unavailable is non-empty", async () => {
+    mockApi(feed([item({})], [{ source: "radarr", detail: "radarr down" }]));
+    renderActivity("admin");
+    await screen.findByText("Some sources did not answer");
+    expect(screen.getByText("radarr: radarr down")).toBeInTheDocument();
+  });
 });
 
 describe("nav", () => {

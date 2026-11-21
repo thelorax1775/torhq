@@ -133,7 +133,7 @@ restricted to the existing allowlist plus categories qBittorrent already has.
               "source": "arr",                 // arr | torrent | slskd | job
               "stall": { "reason": "…", "fix": "…", "detail": "the *arr's own message (admin only)" },
               "href": "/queue" }],             // admin only
-  "unavailable": [{ "source": "radarr", "detail": "…" }] }   // admin only
+  "unavailable": [{ "source": "radarr", "detail": "…" }] }   // admin: one row per failing source; member: a single generic row when any source failed
 ```
 
 Book and audiobook requests (`wanted_items`, last 7 days, not declined) are items
